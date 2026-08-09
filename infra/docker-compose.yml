@@ -1,0 +1,39 @@
+# 需脉枢纽 PoC 基础设施编排（架构 11.2：PG16 + Milvus standalone）
+# 说明：前端/后端应用镜像在后续里程碑加入；本文件先提供数据层。
+name: xmsn-demo
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: xmsn-postgres
+    environment:
+      POSTGRES_USER: xumai
+      POSTGRES_PASSWORD: xumai
+      POSTGRES_DB: xumai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xumai -d xumai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  milvus:
+    image: milvusdb/milvus:v2.4.9
+    container_name: xmsn-milvus
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530"   # gRPC
+      - "9091:9091"     # metrics
+    volumes:
+      - milvusdata:/var/lib/milvus
+
+volumes:
+  pgdata:
+  milvusdata:

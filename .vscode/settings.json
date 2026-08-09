@@ -1,0 +1,32 @@
+{
+  // 工作区根配置（VS Code 读取根目录 .vscode/settings.json）。
+  //
+  // 背景：项目未内置 ESLint 配置，编辑器扩展（全局 ESLint 的 Vue2 规则集 / Vetur）
+  // 会对 Vue3 + naive-ui 的标准语法与 @/ 路径别名产生误报。
+  // 这里统一处理，保证 Problems 面板干净；真实类型检查以 vue-tsc / tsc 为准（已通过）。
+
+  // --- ESLint 扩展：将 Vue2 规则误报降级为 off ---
+  "eslint.rules.customizations": [
+    { "rule": "vue/no-v-model-argument", "severity": "off" },
+    { "rule": "vue/no-v-for-template-key", "severity": "off" },
+    { "rule": "vue/no-parsing-error", "severity": "off" },
+    { "rule": "vue/valid-v-for", "severity": "off" },
+    { "rule": "vue/multi-word-component-names", "severity": "off" },
+    { "rule": "vue/require-default-prop", "severity": "off" },
+    { "rule": "vue/require-prop-types", "severity": "off" },
+    { "rule": "vue/no-v-html", "severity": "off" },
+    { "rule": "vue/html-self-closing", "severity": "off" },
+    { "rule": "vue/attributes-order", "severity": "off" }
+  ],
+
+  // --- Vetur（若安装）：禁用其自带的 TS 校验与 Vue2 规则，避免 @/ 别名误报 ---
+  "vetur.validation.template": false,
+  "vetur.validation.script": false,
+  "vetur.validation.style": false,
+  "vetur.experimental.templateInterpolationService": false,
+
+  // --- 文件关联 ---
+  "files.associations": {
+    "*.vue": "vue"
+  }
+}

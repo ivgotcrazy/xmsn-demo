@@ -1,0 +1,319 @@
+/* 生成物（只读勿手改）—— 由 scripts/generate.ts 从 openapi.json 契约快照生成 */
+
+export type AdminRequestItem = {
+  request_id: string;
+  conversation_id: string;
+  version: number;
+  structured_demand?: Record<string, unknown>;
+  created_at: string;
+  match_count?: number;
+};
+export type AdminRequestListResponse = {
+  list: AdminRequestItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+export type AdminStatsResponse = {
+  total_users: number;
+  total_requests: number;
+  total_vendors: number;
+  total_matches: number;
+};
+export type ApiResponse_AdminRequestListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (AdminRequestListResponse | null);
+};
+export type ApiResponse_AdminStatsResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (AdminStatsResponse | null);
+};
+export type ApiResponse_AuditResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (AuditResponse | null);
+};
+export type ApiResponse_AuthToken_ = {
+  code?: number;
+  message?: string;
+  data?: (AuthToken | null);
+};
+export type ApiResponse_CapabilityOut_ = {
+  code?: number;
+  message?: string;
+  data?: (CapabilityOut | null);
+};
+export type ApiResponse_ConfirmResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (ConfirmResponse | null);
+};
+export type ApiResponse_ConversationListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (ConversationListResponse | null);
+};
+export type ApiResponse_ConversationStartResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (ConversationStartResponse | null);
+};
+export type ApiResponse_DocumentPreviewResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (DocumentPreviewResponse | null);
+};
+export type ApiResponse_FinishResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (FinishResponse | null);
+};
+export type ApiResponse_MatchComputeResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (MatchComputeResponse | null);
+};
+export type ApiResponse_MatchDetailResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (MatchDetailResponse | null);
+};
+export type ApiResponse_MessageResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (MessageResponse | null);
+};
+export type ApiResponse_RequestSnapshotListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (RequestSnapshotListResponse | null);
+};
+export type ApiResponse_UploadResult_ = {
+  code?: number;
+  message?: string;
+  data?: (UploadResult | null);
+};
+export type ApiResponse_UserOut_ = {
+  code?: number;
+  message?: string;
+  data?: (UserOut | null);
+};
+export type ApiResponse_VendorListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (VendorListResponse | null);
+};
+export type ApiResponse_VendorOut_ = {
+  code?: number;
+  message?: string;
+  data?: (VendorOut | null);
+};
+export type ApiResponse_dict_ = {
+  code?: number;
+  message?: string;
+  data?: (Record<string, unknown> | null);
+};
+export type AssistantMessage = {
+  role?: string;
+  content: string;
+  options?: string[];
+};
+export type AuditRequest = {
+  action: "pass" | "reject";
+  comment?: (string | null);
+};
+export type AuditResponse = {
+  vendor_id: string;
+  audit_status: "passed" | "rejected";
+  audited_at: string;
+};
+export type AuthToken = {
+  access_token: string;
+  token_type?: string;
+  expires_in: number;
+  user: UserOut;
+};
+export type Body_upload_api_v1_files_upload_post = {
+  file: string;
+};
+export type Body_upload_capability_api_v1_vendor_capability_upload_post = {
+  vendor_id: string;
+  form_data?: string;
+  free_text?: string;
+  documents?: string[];
+};
+export type CapabilityOut = {
+  capability_id: string;
+  vendor_id: string;
+  structured_tags?: Record<string, unknown>;
+  summary_text?: (string | null);
+  audit_status?: "pending" | "passed" | "rejected";
+  raw_text?: (string | null);
+  doc_urls?: string[];
+};
+export type ConfirmRequest = {
+  conversation_id: string;
+  final_demand?: Record<string, unknown>;
+};
+export type ConfirmResponse = {
+  request_id: string;
+  version: number;
+  redirect_to: string;
+};
+export type ConversationListItem = {
+  conversation_id: string;
+  status: "active" | "confirmed" | "closed";
+  updated_at: string;
+  last_request_id?: (string | null);
+  request_count?: number;
+};
+export type ConversationListResponse = {
+  conversations: ConversationListItem[];
+  total: number;
+};
+export type ConversationStartRequest = {
+  user_id: string;
+};
+export type ConversationStartResponse = {
+  conversation_id: string;
+  first_message: AssistantMessage;
+  current_slots?: Record<string, unknown>;
+};
+export type DocumentPreviewResponse = {
+  doc_id: string;
+  doc_name: string;
+  page: number;
+  content: string;
+  highlight?: (string | null);
+};
+export type FinishResponse = {
+  profile?: Record<string, unknown>;
+  version: number;
+  unset_fields?: string[];
+};
+export type HTTPValidationError = {
+  detail?: ValidationError[];
+};
+export type LoginRequest = {
+  phone?: (string | null);
+  email?: (string | null);
+  password: string;
+};
+export type MatchComputeRequest = {
+  request_id: string;
+};
+export type MatchComputeResponse = {
+  match_results: MatchItem[];
+  total_matches: number;
+  computation_time_ms: number;
+};
+export type MatchDetailResponse = {
+  match_id: string;
+  request_id: string;
+  vendor_id: string;
+  company_name: string;
+  matched_params?: Record<string, unknown>[];
+  partial_params?: Record<string, unknown>[];
+  unmatched_params?: Record<string, unknown>[];
+  ai_comment?: (string | null);
+  explanation_status?: "pending" | "ready";
+};
+export type MatchItem = {
+  match_id: string;
+  vendor_id: string;
+  company_name: string;
+  location?: (string | null);
+  summary?: (string | null);
+  match_score: number;
+  semantic_score?: (number | null);
+  param_hit_rate?: (number | null);
+  critical_fail?: boolean;
+  match_source?: "llm" | "rule" | "hybrid";
+  matched_count?: number;
+  unmatched_count?: number;
+};
+export type MessageRequest = {
+  conversation_id: string;
+  message: string;
+};
+export type MessageResponse = {
+  assistant_message: AssistantMessage;
+  updated_slots?: Record<string, unknown>;
+  slot_confidence?: Record<string, unknown>;
+};
+export type RegisterRequest = {
+  phone?: (string | null);
+  email?: (string | null);
+  password: string;
+  role?: "vendor" | "buyer";
+  verify_code?: (string | null);
+};
+export type RequestSnapshot = {
+  request_id: string;
+  version: number;
+  structured_demand?: Record<string, unknown>;
+  created_at: string;
+  match_count?: number;
+};
+export type RequestSnapshotListResponse = {
+  requests: RequestSnapshot[];
+  total: number;
+};
+export type SendCodeRequest = {
+  phone?: (string | null);
+  email?: (string | null);
+  scene?: "register" | "login" | "reset";
+};
+export type UploadResult = {
+  file_id: string;
+  url: string;
+  name: string;
+  size: number;
+  content_type?: (string | null);
+};
+export type UserOut = {
+  user_id: string;
+  phone?: (string | null);
+  email?: (string | null);
+  role: string;
+  status?: string;
+  created_at: string;
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+};
+export type VendorAuditItem = {
+  vendor_id: string;
+  company_name: string;
+  location?: (string | null);
+  main_industry?: (string | null);
+  audit_status: "pending" | "passed" | "rejected";
+  has_capability?: boolean;
+  created_at: string;
+};
+export type VendorListResponse = {
+  list: VendorAuditItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+export type VendorOut = {
+  vendor_id: string;
+  company_name: string;
+  location?: (string | null);
+  main_industry?: (string | null);
+  credit_code?: (string | null);
+  audit_status?: string;
+  created_at: string;
+};
+export type VendorRegisterRequest = {
+  company_name: string;
+  location?: (string | null);
+  main_industry?: (string | null);
+  credit_code?: (string | null);
+  license_file_id?: (string | null);
+};

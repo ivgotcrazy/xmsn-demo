@@ -1,0 +1,11 @@
+{
+  // 将全局 ESLint（Vue2 规则集）对 Vue3 + naive-ui 的误报降级为 off：
+  // v-model:value / <template v-for :key> 均为 Vue3 标准语法，非真实错误。
+  "eslint.rules.customizations": [
+    { "rule": "vue/no-v-model-argument", "severity": "off" },
+    { "rule": "vue/no-v-for-template-key", "severity": "off" },
+    { "rule": "vue/no-parsing-error", "severity": "off" },
+    { "rule": "vue/valid-v-for", "severity": "off" },
+    { "rule": "vue/multi-word-component-names", "severity": "off" }
+  ]
+}

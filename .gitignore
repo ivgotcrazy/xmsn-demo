@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ===== 本项目补充 =====
+# Node / pnpm
+node_modules/
+dist/
+*.local
+.pnpm-store/
+
+# 本地数据目录（本地盘模拟对象存储，FileStorage）
+/data/
+uploads/
