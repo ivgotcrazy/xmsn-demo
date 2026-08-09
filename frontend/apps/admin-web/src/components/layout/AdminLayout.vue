@@ -80,6 +80,7 @@ function logout(): void {
   flex-direction: column;
 }
 .admin-layout__top {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,6 +97,8 @@ function logout(): void {
   display: flex;
   align-items: center;
   gap: var(--space-12);
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: var(--font-size-13);
 }
 .admin-layout__content {

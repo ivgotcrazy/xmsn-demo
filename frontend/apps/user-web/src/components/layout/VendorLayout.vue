@@ -110,6 +110,7 @@ function logout(): void {
   flex-direction: column;
 }
 .vendor-layout__top {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -126,9 +127,12 @@ function logout(): void {
   display: flex;
   align-items: center;
   gap: var(--space-12);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .vendor-layout__who {
   font-size: var(--font-size-13);
+  white-space: nowrap;
 }
 .vendor-layout__content {
   flex: 1;

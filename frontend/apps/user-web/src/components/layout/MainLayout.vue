@@ -59,6 +59,7 @@ function logout(): void {
   min-height: 100vh;
 }
 .main-layout__nav {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: var(--space-24);
@@ -75,19 +76,24 @@ function logout(): void {
   white-space: nowrap;
 }
 .main-layout__menu {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .main-layout__spacer {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .main-layout__user {
   display: flex;
   align-items: center;
   gap: var(--space-12);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .main-layout__who {
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
+  white-space: nowrap;
 }
 .main-layout__content {
   flex: 1;
