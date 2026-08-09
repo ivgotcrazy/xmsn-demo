@@ -4,33 +4,33 @@
  * 右侧"当前需求"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
  */
 import { onMounted, ref } from "vue"
-import { useRouter } from "vue-router"
 import { NButton, NInput, NTag, useMessage } from "naive-ui"
 
 import {
   conversationConfirm,
   conversationConversationIdMessages,
+  conversationConversationIdRequests,
   conversationFinish,
   conversationMessage,
   conversationStart,
   conversations,
   type ConversationListItem,
+  type DemandPoint,
+  type RequestSnapshot,
 } from "@xmsn/api"
 
 import ChatBubble from "@/components/business/ChatBubble.vue"
 import DemandProfileCard from "@/components/business/DemandProfileCard.vue"
+import MatchResultsModal from "@/components/business/MatchResultsModal.vue"
 import OptionButtonGroup from "@/components/business/OptionButtonGroup.vue"
 
-const router = useRouter()
 const message = useMessage()
 
 const messages = ref<{ role: "assistant" | "user"; content: string; error?: boolean }[]>([])
 const options = ref<string[]>([])
 const input = ref("")
-const slots = ref<Record<string, unknown>>({})
-const confidence = ref<Record<string, number>>({})
-const excluded = ref<string[]>([])
-const unsetFields = ref<string[]>([])
+// 前端「当前需求」：基于会话历史萃取的需求点集合（不感知 schema）
+const demandPoints = ref<DemandPoint[]>([])
 const version = ref<number | null>(null)
 const conversationId = ref("")
 const sending = ref(false)
@@ -41,6 +41,10 @@ const confirmPrompted = ref(false)
 // 02A 会话管理：左侧常驻会话列表 + 当前会话高亮
 const sessions = ref<ConversationListItem[]>([])
 const activeId = ref("")
+// 02A 匹配记录：右侧按会话展示匹配记录 + 匹配结果弹窗
+const records = ref<RequestSnapshot[]>([])
+const modalOpen = ref(false)
+const modalRequestId = ref("")
 
 const STATUS: Record<string, { label: string; type: "success" | "default" | "warning" }> = {
   confirmed: { label: "已确认", type: "success" },
@@ -52,6 +56,11 @@ function statusLabel(s: string): string {
 }
 function statusType(s: string): "success" | "default" | "warning" {
   return STATUS[s]?.type ?? "default"
+}
+
+/** 产品类型前置校验：需求点中是否已明确产品类型（匹配锚点）。 */
+function hasProductType(): boolean {
+  return demandPoints.value.some((p) => p.key === "product_type" && p.value !== "")
 }
 
 async function init(): Promise<void> {
@@ -84,14 +93,13 @@ async function openConversation(id: string): Promise<void> {
     }))
     const last = [...(res.messages ?? [])].reverse().find((m) => m.role === "assistant")
     options.value = last?.options ?? []
-    slots.value = res.current_slots ?? {}
-    confidence.value = (res.slot_confidence ?? {}) as Record<string, number>
-    excluded.value = res.excluded ?? []
-    unsetFields.value = res.unset_fields ?? []
+    demandPoints.value = res.demand_points ?? []
     version.value = res.version ?? null
     confirmPrompted.value = res.confirm_prompted ?? false
+    await loadRecords()
   } catch {
     messages.value = []
+    records.value = []
     message.error("加载会话失败")
   } finally {
     loading.value = false
@@ -105,12 +113,10 @@ async function newSession(): Promise<void> {
     conversationId.value = res.conversation_id
     messages.value = [{ role: "assistant", content: res.first_message.content }]
     options.value = res.first_message.options ?? []
-    slots.value = res.current_slots ?? {}
-    confidence.value = {}
-    excluded.value = []
-    unsetFields.value = []
+    demandPoints.value = res.demand_points ?? []
     version.value = null
     confirmPrompted.value = false
+    records.value = []
     activeId.value = res.conversation_id
     sessions.value.unshift({
       conversation_id: res.conversation_id,
@@ -139,13 +145,10 @@ async function send(text?: string): Promise<void> {
     })
     messages.value.push({ role: "assistant", content: res.assistant_message.content })
     options.value = res.assistant_message.options ?? []
-    slots.value = { ...slots.value, ...res.updated_slots }
-    confidence.value = {
-      ...confidence.value,
-      ...(res.slot_confidence as Record<string, number> | undefined),
-    }
+    // 前端「当前需求」：全量替换为萃取出的需求点集合
+    demandPoints.value = res.demand_points ?? []
     // 原型明确化 §2：核心参数（产品类型等）齐备后 Agent 主动提示确认完成
-    if (slots.value.product_type && !confirmPrompted.value) {
+    if (hasProductType() && !confirmPrompted.value) {
       confirmPrompted.value = true
       messages.value.push({
         role: "assistant",
@@ -175,16 +178,15 @@ function pick(opt: string): void {
 
 async function finish(): Promise<void> {
   if (!conversationId.value || version.value !== null) return
-  // 原型明确化 §2：产品类型未指定时不可完成
-  if (!slots.value.product_type) {
+  // 原型明确化 §2：产品类型未指定时不可完成（匹配锚点）
+  if (!hasProductType()) {
     message.warning("请先明确要寻找的产品类型")
     return
   }
   try {
     const res = await conversationFinish({ conversation_id: conversationId.value, message: "" })
     version.value = res.version
-    slots.value = { ...slots.value, ...res.profile }
-    unsetFields.value = res.unset_fields ?? []
+    demandPoints.value = res.demand_points ?? []
     message.success(`需求档案已生成（版本 v${res.version}）`)
   } catch {
     message.error("生成需求档案失败")
@@ -196,12 +198,42 @@ async function confirm(): Promise<void> {
   try {
     const res = await conversationConfirm({
       conversation_id: conversationId.value,
-      final_demand: slots.value,
+      demand_points: demandPoints.value,
     })
-    await router.push(res.redirect_to)
+    message.success("已提交匹配")
+    // 02A 匹配记录：不跳页，刷新匹配记录并首次自动弹出结果
+    await loadRecords()
+    modalRequestId.value = res.request_id
+    modalOpen.value = true
   } catch {
     message.error("提交匹配失败")
   }
+}
+
+/** 02A 匹配记录：拉取当前会话的匹配记录（需求匹配快照列表）。 */
+async function loadRecords(): Promise<void> {
+  if (!conversationId.value) {
+    records.value = []
+    return
+  }
+  try {
+    const res = await conversationConversationIdRequests(conversationId.value)
+    records.value = res.requests ?? []
+  } catch {
+    records.value = []
+  }
+}
+
+/** 02A 匹配记录：点击卡片打开匹配结果弹窗。 */
+function openRecord(requestId: string): void {
+  modalRequestId.value = requestId
+  modalOpen.value = true
+}
+
+/** 匹配记录卡片标题：优先显示匹配产品类型。 */
+function recordTitle(r: RequestSnapshot): string {
+  const pt = (r.structured_demand as Record<string, unknown> | undefined)?.product_type
+  return pt ? String(pt) : "需求匹配"
 }
 
 onMounted(() => {
@@ -265,8 +297,8 @@ onMounted(() => {
                 发送
               </NButton>
               <NButton
-                :disabled="version !== null || !conversationId || !slots.product_type"
-                :title="!slots.product_type ? '请先明确要寻找的产品类型' : undefined"
+                :disabled="version !== null || !conversationId || !hasProductType()"
+                :title="!hasProductType() ? '请先明确要寻找的产品类型' : undefined"
                 @click="finish()"
               >
                 {{ version !== null ? `已生成 v${version}` : "完成需求描述" }}
@@ -274,32 +306,54 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <aside class="chat-page__aside" :class="{ 'is-collapsed': asideCollapsed }">
-          <div class="chat-page__aside-head">
-            <h3>当前需求</h3>
-            <NButton text size="small" @click="asideCollapsed = !asideCollapsed">
-              {{ asideCollapsed ? "展开" : "收起" }}
-            </NButton>
+        <aside class="chat-page__aside">
+          <!-- 当前需求 card -->
+          <div class="chat-page__aside-card chat-page__demand" :class="{ 'is-collapsed': asideCollapsed }">
+            <div class="chat-page__aside-head">
+              <h3>当前需求</h3>
+              <NButton text size="small" @click="asideCollapsed = !asideCollapsed">
+                {{ asideCollapsed ? "展开" : "收起" }}
+              </NButton>
+            </div>
+            <div v-show="!asideCollapsed" class="chat-page__aside-body">
+              <DemandProfileCard :points="demandPoints" />
+            </div>
+            <div v-if="version !== null && !asideCollapsed" class="chat-page__demand-footer">
+              <NButton type="primary" block @click="confirm()">确认并提交匹配 →</NButton>
+            </div>
           </div>
-          <div v-show="!asideCollapsed" class="chat-page__aside-body">
-            <DemandProfileCard
-              :slots="slots"
-              :excluded="excluded"
-              :confidence="confidence"
-              :unset-fields="unsetFields"
-            />
-            <NButton
-              v-if="version !== null"
-              type="primary"
-              block
-              @click="confirm()"
-            >
-              确认并提交匹配 →
-            </NButton>
+
+          <!-- 匹配记录 card -->
+          <div class="chat-page__aside-card chat-page__records-card">
+            <div class="chat-page__aside-head">
+              <h3>匹配记录</h3>
+            </div>
+            <div v-if="!records.length" class="chat-page__records-empty">
+              暂无匹配结果，完成需求并提交匹配后生成
+            </div>
+            <div v-else class="chat-page__records-list">
+              <div
+                v-for="r in records"
+                :key="r.request_id"
+                class="chat-page__record"
+                @click="openRecord(r.request_id)"
+              >
+                <div class="chat-page__record-top">
+                  <span class="chat-page__record-name">{{ recordTitle(r) }}</span>
+                  <span class="chat-page__record-version">v{{ r.version }}</span>
+                </div>
+                <div class="chat-page__record-meta">
+                  {{ r.match_count ?? 0 }} 家 · {{ r.created_at }}
+                </div>
+              </div>
+            </div>
           </div>
         </aside>
       </div>
     </div>
+
+    <!-- 02B 匹配结果弹窗（并入 02A） -->
+    <MatchResultsModal v-model:show="modalOpen" :request-id="modalRequestId" />
   </div>
 </template>
 
@@ -426,31 +480,91 @@ onMounted(() => {
 .chat-page__aside {
   width: 320px;
   flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-height: 0;
+}
+/* 独立 card：当前需求 与 匹配记录 各占一半 */
+.chat-page__aside-card {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
   background: var(--color-bg-panel);
   border: var(--border-width-1) solid var(--color-border-subtle);
   border-radius: var(--radius-12);
   padding: var(--space-12);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
   overflow-y: auto;
 }
-.chat-page__aside.is-collapsed {
-  width: auto;
-  min-width: 120px;
+.chat-page__demand {
+  overflow: hidden;
+}
+.chat-page__demand.is-collapsed {
+  flex: 0 0 auto;
 }
 .chat-page__aside-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: none;
 }
 .chat-page__aside-head h3 {
   margin: 0;
   font-size: var(--font-size-16);
 }
 .chat-page__aside-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-12);
+}
+.chat-page__demand-footer {
+  flex: none;
+  padding-top: var(--space-12);
+}
+.chat-page__records-empty {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  padding: var(--space-8) 0;
+}
+.chat-page__records-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.chat-page__record {
+  padding: var(--space-12);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  cursor: pointer;
+}
+.chat-page__record:hover {
+  border-color: var(--color-primary);
+}
+.chat-page__record-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.chat-page__record-name {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-page__record-version {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+.chat-page__record-meta {
+  margin-top: var(--space-6);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
 }
 </style>

@@ -160,12 +160,12 @@ export type CapabilityOut = {
 };
 export type ConfirmRequest = {
   conversation_id: string;
-  final_demand?: Record<string, unknown>;
+  demand_points?: DemandPoint[];
 };
 export type ConfirmResponse = {
   request_id: string;
   version: number;
-  redirect_to: string;
+  redirect_to?: string;
 };
 export type ConversationListItem = {
   conversation_id: string;
@@ -188,10 +188,7 @@ export type ConversationMessagesResponse = {
   conversation_id: string;
   status: "active" | "confirmed" | "closed";
   messages: ConversationMessageItem[];
-  current_slots?: Record<string, unknown>;
-  slot_confidence?: Record<string, unknown>;
-  excluded?: string[];
-  unset_fields?: string[];
+  demand_points?: DemandPoint[];
   version?: (number | null);
   confirm_prompted?: boolean;
 };
@@ -201,7 +198,13 @@ export type ConversationStartRequest = {
 export type ConversationStartResponse = {
   conversation_id: string;
   first_message: AssistantMessage;
-  current_slots?: Record<string, unknown>;
+  demand_points?: DemandPoint[];
+};
+export type DemandPoint = {
+  key: string;
+  label: string;
+  value: (string | string[]);
+  confidence?: number;
 };
 export type DocumentPreviewResponse = {
   doc_id: string;
@@ -211,9 +214,8 @@ export type DocumentPreviewResponse = {
   highlight?: (string | null);
 };
 export type FinishResponse = {
-  profile?: Record<string, unknown>;
   version: number;
-  unset_fields?: string[];
+  demand_points?: DemandPoint[];
 };
 export type HTTPValidationError = {
   detail?: ValidationError[];
@@ -262,8 +264,7 @@ export type MessageRequest = {
 };
 export type MessageResponse = {
   assistant_message: AssistantMessage;
-  updated_slots?: Record<string, unknown>;
-  slot_confidence?: Record<string, unknown>;
+  demand_points?: DemandPoint[];
 };
 export type RegisterRequest = {
   phone?: (string | null);

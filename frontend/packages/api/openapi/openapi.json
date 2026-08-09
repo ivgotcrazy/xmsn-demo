@@ -1924,9 +1924,12 @@
             "type": "string",
             "title": "Conversation Id"
           },
-          "final_demand": {
-            "type": "object",
-            "title": "Final Demand"
+          "demand_points": {
+            "items": {
+              "$ref": "#/components/schemas/DemandPoint"
+            },
+            "type": "array",
+            "title": "Demand Points"
           }
         },
         "type": "object",
@@ -1947,14 +1950,14 @@
           },
           "redirect_to": {
             "type": "string",
-            "title": "Redirect To"
+            "title": "Redirect To",
+            "default": ""
           }
         },
         "type": "object",
         "required": [
           "request_id",
-          "version",
-          "redirect_to"
+          "version"
         ],
         "title": "ConfirmResponse"
       },
@@ -2082,27 +2085,12 @@
             "type": "array",
             "title": "Messages"
           },
-          "current_slots": {
-            "type": "object",
-            "title": "Current Slots"
-          },
-          "slot_confidence": {
-            "type": "object",
-            "title": "Slot Confidence"
-          },
-          "excluded": {
+          "demand_points": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/DemandPoint"
             },
             "type": "array",
-            "title": "Excluded"
-          },
-          "unset_fields": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Unset Fields"
+            "title": "Demand Points"
           },
           "version": {
             "anyOf": [
@@ -2128,7 +2116,7 @@
           "messages"
         ],
         "title": "ConversationMessagesResponse",
-        "description": "会话完整现场：消息气泡 + 当前需求槽位 + 档案版本（02A 点击会话切换恢复）。"
+        "description": "会话完整现场：消息气泡 + 完整需求点集合 + 档案版本（02A 点击会话切换恢复）。"
       },
       "ConversationStartRequest": {
         "properties": {
@@ -2152,9 +2140,12 @@
           "first_message": {
             "$ref": "#/components/schemas/AssistantMessage"
           },
-          "current_slots": {
-            "type": "object",
-            "title": "Current Slots"
+          "demand_points": {
+            "items": {
+              "$ref": "#/components/schemas/DemandPoint"
+            },
+            "type": "array",
+            "title": "Demand Points"
           }
         },
         "type": "object",
@@ -2163,6 +2154,45 @@
           "first_message"
         ],
         "title": "ConversationStartResponse"
+      },
+      "DemandPoint": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Value"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value"
+        ],
+        "title": "DemandPoint",
+        "description": "会话中萃取的单一需求点（前端「当前需求」展示单元，不感知 schema；固定/扩展由后端映射）。"
       },
       "DocumentPreviewResponse": {
         "properties": {
@@ -2206,20 +2236,16 @@
       },
       "FinishResponse": {
         "properties": {
-          "profile": {
-            "type": "object",
-            "title": "Profile"
-          },
           "version": {
             "type": "integer",
             "title": "Version"
           },
-          "unset_fields": {
+          "demand_points": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/DemandPoint"
             },
             "type": "array",
-            "title": "Unset Fields"
+            "title": "Demand Points"
           }
         },
         "type": "object",
@@ -2227,7 +2253,7 @@
           "version"
         ],
         "title": "FinishResponse",
-        "description": "完成需求描述 → 生成需求档案（版本 vN）。"
+        "description": "完成需求描述 → 生成需求档案（版本 vN，含完整需求点集合）。"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2506,13 +2532,12 @@
           "assistant_message": {
             "$ref": "#/components/schemas/AssistantMessage"
           },
-          "updated_slots": {
-            "type": "object",
-            "title": "Updated Slots"
-          },
-          "slot_confidence": {
-            "type": "object",
-            "title": "Slot Confidence"
+          "demand_points": {
+            "items": {
+              "$ref": "#/components/schemas/DemandPoint"
+            },
+            "type": "array",
+            "title": "Demand Points"
           }
         },
         "type": "object",
@@ -2520,7 +2545,7 @@
           "assistant_message"
         ],
         "title": "MessageResponse",
-        "description": "SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。"
+        "description": "SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。\ndemand_points 为当前完整需求点集合（全量返回，前端整体替换）。"
       },
       "RegisterRequest": {
         "properties": {

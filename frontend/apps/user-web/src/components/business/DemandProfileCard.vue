@@ -1,76 +1,36 @@
 <script setup lang="ts">
 /**
- * 需求档案卡片（COMP-019）：按 Schema 品类分三态展示（已指定 / 未指定·可忽略 / 已排除）。
+ * 需求档案卡片（COMP-019）：基于会话历史萃取的需求点列表（固定/扩展统一展示，不感知 schema）。
  */
-import { computed } from "vue"
 import { NTag } from "naive-ui"
 
-import { REQUEST_SCHEMA_FIELDS } from "@xmsn/types"
+import type { DemandPoint } from "@xmsn/api"
 
-const props = defineProps<{
-  slots: Record<string, unknown>
-  excluded?: string[]
-  confidence?: Record<string, number>
-  unsetFields?: string[]
+defineProps<{
+  points: DemandPoint[]
 }>()
 
-const filled = computed(() =>
-  REQUEST_SCHEMA_FIELDS.filter((f) => {
-    const v = props.slots?.[f.key]
-    const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)
-    return !empty && !props.excluded?.includes(f.key)
-  }),
-)
-const excluded = computed(() => REQUEST_SCHEMA_FIELDS.filter((f) => props.excluded?.includes(f.key)))
-const ignored = computed(() =>
-  REQUEST_SCHEMA_FIELDS.filter(
-    (f) => !filled.value.includes(f) && !excluded.value.includes(f),
-  ),
-)
-
-function displayValue(v: unknown): string {
-  return Array.isArray(v) ? v.join("、") : String(v ?? "")
-}
-function confidenceOf(key: string): number | undefined {
-  return props.confidence?.[key]
+function displayValue(v: string | string[]): string {
+  return Array.isArray(v) ? v.join("、") : v
 }
 </script>
 
 <template>
   <div class="demand-profile">
-    <section v-if="filled.length">
-      <h4>已指定</h4>
-      <ul>
-        <li v-for="f in filled" :key="f.key">
-          <NTag size="small" type="success">{{ f.label }}</NTag>
-          <span class="value">{{ displayValue(slots[f.key]) }}</span>
-          <span v-if="confidenceOf(f.key) !== undefined" class="conf">
-            {{ Math.round((confidenceOf(f.key) ?? 0) * 100) }}%
-          </span>
-        </li>
-      </ul>
-    </section>
-    <section v-if="ignored.length">
-      <h4>未指定 · 可忽略</h4>
-      <ul>
-        <li v-for="f in ignored" :key="f.key">
-          <NTag size="small">{{ f.label }}</NTag>
-          <span class="value muted">未填写</span>
-        </li>
-      </ul>
-    </section>
-    <section v-if="excluded.length">
-      <h4>已排除</h4>
-      <ul>
-        <li v-for="f in excluded" :key="f.key">
-          <NTag size="small" type="error">{{ f.label }}</NTag>
-          <span class="value">{{ displayValue(slots[f.key]) }}</span>
-        </li>
-      </ul>
-    </section>
-    <div v-if="unsetFields?.length" class="hint">
-      可忽略字段：{{ unsetFields.join("、") }}
+    <div v-if="!points.length" class="demand-profile__empty">
+      正在对话中萃取您的需求…
     </div>
+    <ul v-else>
+      <li v-for="p in points" :key="p.key">
+        <div class="demand-profile__row">
+          <NTag size="small">{{ p.label }}</NTag>
+          <span v-if="p.confidence !== undefined" class="demand-profile__conf">
+            {{ Math.round((p.confidence ?? 0) * 100) }}%
+          </span>
+        </div>
+        <div class="demand-profile__value">{{ displayValue(p.value) }}</div>
+      </li>
+    </ul>
   </div>
 </template>
 
@@ -78,13 +38,12 @@ function confidenceOf(key: string): number | undefined {
 .demand-profile {
   display: flex;
   flex-direction: column;
-  gap: var(--space-16);
+  gap: var(--space-8);
 }
-.demand-profile h4 {
-  margin: 0 0 var(--space-8);
-  font-size: var(--font-size-14);
-  font-weight: var(--font-weight-600);
+.demand-profile__empty {
+  font-size: var(--font-size-13);
   color: var(--color-text-secondary);
+  padding: var(--space-8) 0;
 }
 .demand-profile ul {
   margin: 0;
@@ -96,22 +55,22 @@ function confidenceOf(key: string): number | undefined {
 }
 .demand-profile li {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.demand-profile__row {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-8);
 }
-.value {
-  flex: 1;
+.demand-profile__value {
   color: var(--color-text);
+  line-height: var(--line-height-normal);
+  padding-left: var(--space-2);
 }
-.value.muted {
-  color: var(--color-disabled);
-}
-.conf {
+.demand-profile__conf {
   font-size: var(--font-size-12);
   color: var(--color-primary);
-}
-.hint {
-  font-size: var(--font-size-12);
-  color: var(--color-disabled);
 }
 </style>

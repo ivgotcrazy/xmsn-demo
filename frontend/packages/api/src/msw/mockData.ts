@@ -46,6 +46,25 @@ function resolveDemoUser(phone: string | undefined): (typeof DEMO_USER_ADMIN)[] 
   return [DEMO_USER_BUYER]
 }
 
+/** 演示需求点集合：机顶盒（固定字段 + 扩展需求点：外壳颜色/双系统/海外认证）。 */
+const DEMAND_POINTS_STB = [
+  { key: "product_type", label: "产品类型", value: "机顶盒", confidence: 1.0 },
+  { key: "os_support", label: "操作系统", value: ["Linux"], confidence: 1.0 },
+  { key: "interfaces", label: "接口", value: ["网口", "USB"], confidence: 1.0 },
+  { key: "min_order_qty", label: "起订量", value: "5000 台", confidence: 1.0 },
+  { key: "certifications", label: "认证", value: ["ISO9001"], confidence: 0.9 },
+  { key: "appearance", label: "外壳颜色", value: "黑色", confidence: 0.95 },
+  { key: "dual_system", label: "双系统", value: "支持", confidence: 0.9 },
+  { key: "overseas_cert", label: "海外认证", value: ["CE", "FCC"], confidence: 0.85 },
+]
+
+/** 演示需求点集合：智能音箱（进行中会话）。 */
+const DEMAND_POINTS_SPEAKER = [
+  { key: "product_type", label: "产品类型", value: "智能音箱", confidence: 1.0 },
+  { key: "os_support", label: "操作系统", value: ["Linux"], confidence: 1.0 },
+  { key: "appearance", label: "外壳颜色", value: "白色", confidence: 0.9 },
+]
+
 export const mockData: Record<string, MockResolver | unknown> = {
   // ---- auth ----
   "POST /api/v1/auth/login": (request: Request) =>
@@ -150,7 +169,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
       content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？",
       options: ["机顶盒", "智能音箱", "IoT设备", "其他"],
     },
-    current_slots: {},
+    demand_points: [],
   }),
   "POST /api/v1/conversation/message": () => ({
     assistant_message: {
@@ -158,24 +177,16 @@ export const mockData: Record<string, MockResolver | unknown> = {
       content: "好的，机顶盒代工，需要Linux系统。请问您需要哪些接口？",
       options: ["网口", "USB", "HDMI", "GPIO"],
     },
-    updated_slots: { product_type: "机顶盒", os_support: ["Linux"] },
-    slot_confidence: { product_type: 1.0, os_support: 1.0 },
+    demand_points: DEMAND_POINTS_STB,
   }),
   "POST /api/v1/conversation/finish": () => ({
-    profile: {
-      product_type: "机顶盒",
-      os_support: ["Linux"],
-      interfaces: ["网口", "USB"],
-      min_order_qty: 5000,
-      certifications: ["ISO9001"],
-    },
     version: 1,
-    unset_fields: ["lead_time_days", "application_scenarios"],
+    demand_points: DEMAND_POINTS_STB,
   }),
   "POST /api/v1/conversation/confirm": () => ({
-    request_id: "req-001",
+    request_id: "req-002",
     version: 2,
-    redirect_to: "/buyer/matches/req-001",
+    redirect_to: "",
   }),
   "GET /api/v1/conversations": () => ({
     conversations: [
@@ -196,30 +207,38 @@ export const mockData: Record<string, MockResolver | unknown> = {
     ],
     total: 2,
   }),
-  "GET /api/v1/conversation/{conversation_id}/requests": () => ({
-    requests: [
-      {
-        request_id: "req-001",
-        version: 1,
-        structured_demand: { product_type: "机顶盒", os_support: ["Linux"] },
-        created_at: "2026-08-05T09:00:00Z",
-        match_count: 5,
-      },
-      {
-        request_id: "req-002",
-        version: 2,
-        structured_demand: {
-          product_type: "机顶盒",
-          os_support: ["Linux"],
-          interfaces: ["网口", "USB"],
-          min_order_qty: 5000,
-        },
-        created_at: "2026-08-05T09:30:00Z",
-        match_count: 3,
-      },
-    ],
-    total: 2,
-  }),
+  "GET /api/v1/conversation/{conversation_id}/requests": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const id = parts[parts.length - 2] ?? ""
+    // 按会话维度：仅 conv-001（已确认）有匹配记录，其余会话（进行中）为空
+    if (id === "conv-001") {
+      return {
+        requests: [
+          {
+            request_id: "req-001",
+            version: 1,
+            structured_demand: { product_type: "机顶盒", os_support: ["Linux"] },
+            created_at: "2026-08-05T09:00:00Z",
+            match_count: 5,
+          },
+          {
+            request_id: "req-002",
+            version: 2,
+            structured_demand: {
+              product_type: "机顶盒",
+              os_support: ["Linux"],
+              interfaces: ["网口", "USB"],
+              min_order_qty: 5000,
+            },
+            created_at: "2026-08-05T09:30:00Z",
+            match_count: 3,
+          },
+        ],
+        total: 2,
+      }
+    }
+    return { requests: [], total: 0 }
+  },
   "GET /api/v1/conversation/{conversation_id}/messages": (request: Request) => {
     const parts = new URL(request.url).pathname.split("/").filter(Boolean)
     const id = parts[parts.length - 2] ?? ""
@@ -239,16 +258,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
           { role: "user", content: "确认完成" },
           { role: "assistant", content: "已生成需求档案 v1" },
         ],
-        current_slots: {
-          product_type: "机顶盒",
-          os_support: ["Linux"],
-          interfaces: ["网口", "USB"],
-          min_order_qty: 5000,
-          certifications: ["ISO9001"],
-        },
-        slot_confidence: { product_type: 1.0, os_support: 1.0, interfaces: 1.0, min_order_qty: 1.0, certifications: 0.9 },
-        excluded: [],
-        unset_fields: ["lead_time_days", "application_scenarios"],
+        demand_points: DEMAND_POINTS_STB,
         version: 1,
         confirm_prompted: true,
       }
@@ -265,10 +275,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
           { role: "user", content: "Linux" },
           { role: "assistant", content: "好的，Linux 系统已记录。还需要补充其他要求吗？" },
         ],
-        current_slots: { product_type: "智能音箱", os_support: ["Linux"] },
-        slot_confidence: { product_type: 1.0, os_support: 1.0 },
-        excluded: [],
-        unset_fields: [],
+        demand_points: DEMAND_POINTS_SPEAKER,
         version: null,
         confirm_prompted: true,
       }
@@ -278,10 +285,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
       conversation_id: id,
       status: "active",
       messages: [],
-      current_slots: {},
-      slot_confidence: {},
-      excluded: [],
-      unset_fields: [],
+      demand_points: [],
       version: null,
       confirm_prompted: false,
     }

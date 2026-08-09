@@ -18,10 +18,19 @@ class AssistantMessage(BaseModel):
     options: list[str] = Field(default_factory=list, description="可选回答（槽位候选）")
 
 
+class DemandPoint(BaseModel):
+    """会话中萃取的单一需求点（前端「当前需求」展示单元，不感知 schema；固定/扩展由后端映射）。"""
+
+    key: str
+    label: str
+    value: str | list[str]
+    confidence: float = 1.0
+
+
 class ConversationStartResponse(BaseModel):
     conversation_id: str
     first_message: AssistantMessage
-    current_slots: dict = Field(default_factory=dict)
+    demand_points: list[DemandPoint] = Field(default_factory=list)
 
 
 class MessageRequest(BaseModel):
@@ -30,30 +39,29 @@ class MessageRequest(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    """SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。"""
+    """SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。
+    demand_points 为当前完整需求点集合（全量返回，前端整体替换）。"""
 
     assistant_message: AssistantMessage
-    updated_slots: dict = Field(default_factory=dict)
-    slot_confidence: dict = Field(default_factory=dict)
+    demand_points: list[DemandPoint] = Field(default_factory=list)
 
 
 class FinishResponse(BaseModel):
-    """完成需求描述 → 生成需求档案（版本 vN）。"""
+    """完成需求描述 → 生成需求档案（版本 vN，含完整需求点集合）。"""
 
-    profile: dict = Field(default_factory=dict)
     version: int
-    unset_fields: list[str] = Field(default_factory=list)
+    demand_points: list[DemandPoint] = Field(default_factory=list)
 
 
 class ConfirmRequest(BaseModel):
     conversation_id: str
-    final_demand: dict = Field(default_factory=dict)
+    demand_points: list[DemandPoint] = Field(default_factory=list)
 
 
 class ConfirmResponse(BaseModel):
     request_id: str
     version: int
-    redirect_to: str
+    redirect_to: str = ""
 
 
 # ---- 历史（产品 2.8）----
@@ -80,15 +88,12 @@ class ConversationMessageItem(BaseModel):
 
 
 class ConversationMessagesResponse(BaseModel):
-    """会话完整现场：消息气泡 + 当前需求槽位 + 档案版本（02A 点击会话切换恢复）。"""
+    """会话完整现场：消息气泡 + 完整需求点集合 + 档案版本（02A 点击会话切换恢复）。"""
 
     conversation_id: str
     status: Literal["active", "confirmed", "closed"]
     messages: list[ConversationMessageItem]
-    current_slots: dict = Field(default_factory=dict)
-    slot_confidence: dict = Field(default_factory=dict)
-    excluded: list[str] = Field(default_factory=list)
-    unset_fields: list[str] = Field(default_factory=list)
+    demand_points: list[DemandPoint] = Field(default_factory=list)
     version: int | None = None
     confirm_prompted: bool = False
 
