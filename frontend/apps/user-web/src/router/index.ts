@@ -77,6 +77,18 @@ const routes = [
         component: () => import("@/views/buyer/ChatView.vue"),
         meta: { title: "需求对话" },
       },
+      {
+        path: "matches/:requestId",
+        name: "buyer-match-result",
+        component: () => import("@/views/buyer/MatchesResultView.vue"),
+        meta: { title: "匹配结果" },
+      },
+      {
+        path: "vendor/:vendorId",
+        name: "buyer-vendor-capability",
+        component: () => import("@/views/buyer/VendorCapabilityView.vue"),
+        meta: { title: "厂商能力" },
+      },
     ],
   },
   { path: "/:pathMatch(.*)*", redirect: "/buyer/chat" },

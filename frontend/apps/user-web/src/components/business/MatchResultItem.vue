@@ -18,17 +18,17 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
 
 <template>
   <div class="match-item" :class="{ 'match-item--active': active }" @click="emit('open')">
-    <div class="match-item__info">
+    <div class="match-item__main">
       <div class="match-item__head">
         <span class="match-item__name">{{ item.company_name }}</span>
         <NTag size="small" :bordered="false">{{ SOURCE_LABEL[item.match_source ?? "llm"] ?? item.match_source }}</NTag>
         <NTag v-if="item.critical_fail" size="small" type="error" :bordered="false">关键参数不符</NTag>
       </div>
+      <div v-if="item.summary" class="match-item__summary">{{ item.summary }}</div>
       <div class="match-item__meta">
         {{ item.location ?? "—" }} · 参数 {{ (item.matched_count ?? 0) + (item.unmatched_count ?? 0) }} 项
       </div>
     </div>
-    <div v-if="item.summary" class="match-item__summary">{{ item.summary }}</div>
     <div class="match-item__score">
       <MatchRing :score="item.match_score" :size="48" :stroke-width="4" />
       <span class="match-item__arrow">{{ active ? "收起 ▴" : "详情 ▾" }}</span>
@@ -40,8 +40,8 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
 .match-item {
   display: flex;
   align-items: center;
-  gap: var(--space-16);
-  padding: var(--space-16);
+  gap: var(--space-12);
+  padding: var(--space-12);
   background: var(--color-bg-panel);
   border: var(--border-width-1) solid var(--color-border-subtle);
   border-radius: var(--radius-12);
@@ -55,34 +55,42 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
   border-color: var(--color-primary);
   box-shadow: var(--shadow-1);
 }
-.match-item__info {
-  flex: 2;
+.match-item__main {
+  flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 .match-item__head {
   display: flex;
   align-items: center;
   gap: var(--space-8);
+  min-width: 0;
 }
 .match-item__name {
-  font-size: var(--font-size-16);
+  font-size: var(--font-size-14);
   font-weight: var(--font-weight-600);
-}
-.match-item__meta {
-  margin-top: var(--space-4);
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .match-item__summary {
-  flex: 3;
-  min-width: 0;
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12);
   color: var(--color-text-secondary);
   line-height: var(--line-height-normal);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.match-item__meta {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .match-item__score {
   flex: none;

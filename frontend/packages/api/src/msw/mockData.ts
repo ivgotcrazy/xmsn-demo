@@ -101,15 +101,40 @@ export const mockData: Record<string, MockResolver | unknown> = {
     audit_status: "pending",
     created_at: "2026-08-02T03:00:00Z",
   }),
-  "GET /api/v1/vendor/{vendor_id}": () => ({
-    vendor_id: "v-001",
-    company_name: "东莞某某电子有限公司",
-    location: "广东东莞",
-    main_industry: "消费电子",
-    credit_code: "91441900MA4WU7XXXX",
-    audit_status: "passed",
-    created_at: "2026-08-02T03:00:00Z",
-  }),
+  "GET /api/v1/vendor/{vendor_id}": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const id = parts[parts.length - 1] ?? "v-001"
+    const VENDORS: Record<string, object> = {
+      "v-001": {
+        vendor_id: "v-001",
+        company_name: "东莞某某电子有限公司",
+        location: "广东东莞",
+        main_industry: "消费电子",
+        credit_code: "91441900MA4WU7XXXX",
+        audit_status: "passed",
+        created_at: "2026-08-02T03:00:00Z",
+      },
+      "v-002": {
+        vendor_id: "v-002",
+        company_name: "深圳智联科技",
+        location: "广东深圳",
+        main_industry: "消费电子",
+        credit_code: "91440300MA5KX9YYYY",
+        audit_status: "pending",
+        created_at: "2026-08-03T04:00:00Z",
+      },
+      "v-003": {
+        vendor_id: "v-003",
+        company_name: "惠州华创电子",
+        location: "广东惠州",
+        main_industry: "消费电子",
+        credit_code: "91441300MA4T7ZZZZZ",
+        audit_status: "passed",
+        created_at: "2026-08-01T02:00:00Z",
+      },
+    }
+    return VENDORS[id] ?? VENDORS["v-001"]
+  },
   "POST /api/v1/vendor/capability/upload": () => ({
     capability_id: "cap-001",
     vendor_id: "v-001",
@@ -292,71 +317,129 @@ export const mockData: Record<string, MockResolver | unknown> = {
   },
 
   // ---- match ----
-  "POST /api/v1/match/compute": () => ({
-    match_results: [
-      {
-        match_id: "m-001",
-        vendor_id: "v-001",
-        company_name: "东莞某某电子有限公司",
-        location: "广东东莞",
-        summary: "珠三角10年机顶盒ODM经验，Linux 深度定制，支持网口/USB/HDMI 接口。",
-        match_score: 92.5,
-        semantic_score: 0.82,
-        param_hit_rate: 0.96,
-        critical_fail: false,
-        match_source: "hybrid",
-        matched_count: 7,
-        unmatched_count: 1,
-      },
-      {
+  "POST /api/v1/match/compute": (request: Request) =>
+    request
+      .json()
+      .then((body: { request_id?: string }) => {
+        const requestId = body.request_id ?? ""
+        // 一个需求档案（request_id）对应多个匹配结果；随结果返回该档案的需求点集合
+        return {
+          match_results: [
+            {
+              match_id: "m-001",
+              vendor_id: "v-001",
+              company_name: "东莞某某电子有限公司",
+              location: "广东东莞",
+              summary: "珠三角10年机顶盒ODM经验，Linux 深度定制，支持网口/USB/HDMI 接口。",
+              match_score: 92.5,
+              semantic_score: 0.82,
+              param_hit_rate: 0.96,
+              critical_fail: false,
+              match_source: "hybrid",
+              matched_count: 7,
+              unmatched_count: 1,
+            },
+            {
+              match_id: "m-002",
+              vendor_id: "v-002",
+              company_name: "深圳智联科技",
+              location: "广东深圳",
+              summary: "机顶盒/OTT 产品制造，Android 平台为主，少量 Linux 定制能力。",
+              match_score: 78.0,
+              semantic_score: 0.71,
+              param_hit_rate: 0.82,
+              critical_fail: false,
+              match_source: "llm",
+              matched_count: 6,
+              unmatched_count: 2,
+            },
+            {
+              match_id: "m-003",
+              vendor_id: "v-003",
+              company_name: "惠州华创电子",
+              location: "广东惠州",
+              summary: "消费电子整机代工，偏智能音箱/穿戴，机顶盒经验较少。",
+              match_score: 45.0,
+              semantic_score: 0.58,
+              param_hit_rate: 0.52,
+              critical_fail: true,
+              match_source: "llm",
+              matched_count: 3,
+              unmatched_count: 5,
+            },
+          ],
+          total_matches: 3,
+          computation_time_ms: 1250,
+          demand_points: requestId === "req-002" ? DEMAND_POINTS_STB : DEMAND_POINTS_STB,
+        }
+      })
+      .catch(() => ({
+        match_results: [],
+        total_matches: 0,
+        computation_time_ms: 0,
+        demand_points: [],
+      })),
+  "GET /api/v1/match/detail/{match_id}": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const id = parts[parts.length - 1] ?? "m-001"
+    const base = { request_id: "req-001", explanation_status: "ready" as const }
+    // m-002：深圳智联科技（Android 为主，Linux 定制有限）
+    if (id === "m-002") {
+      return {
         match_id: "m-002",
         vendor_id: "v-002",
         company_name: "深圳智联科技",
-        location: "广东深圳",
-        summary: "机顶盒/OTT 产品制造，Android 平台为主，少量 Linux 定制能力。",
-        match_score: 78.0,
-        semantic_score: 0.71,
-        param_hit_rate: 0.82,
-        critical_fail: false,
-        match_source: "llm",
-        matched_count: 6,
-        unmatched_count: 2,
-      },
-      {
+        matched_params: [
+          { key: "product_type", label: "产品类型", value: "机顶盒", verdict: "matched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 1, source_text: "专注机顶盒/OTT 制造" },
+          { key: "os_support", label: "操作系统", value: "Linux", verdict: "partial", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 2, source_text: "Android 为主，少量 Linux 定制" },
+        ],
+        partial_params: [],
+        unmatched_params: [
+          { key: "interfaces", label: "接口", value: "网口、USB、HDMI", verdict: "unmatched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 2, source_text: "主要提供 HDMI/USB，网口需确认" },
+        ],
+        ai_comment: "该厂商以 Android 平台为主，Linux 定制能力有限，接口覆盖部分满足，整体匹配度中等。",
+        ...base,
+      }
+    }
+    // m-003：惠州华创电子（偏智能音箱，机顶盒经验少，关键不符）
+    if (id === "m-003") {
+      return {
         match_id: "m-003",
         vendor_id: "v-003",
         company_name: "惠州华创电子",
-        location: "广东惠州",
-        summary: "消费电子整机代工，偏智能音箱/穿戴，机顶盒经验较少。",
-        match_score: 45.0,
-        semantic_score: 0.58,
-        param_hit_rate: 0.52,
-        critical_fail: true,
-        match_source: "llm",
-        matched_count: 3,
-        unmatched_count: 5,
-      },
-    ],
-    total_matches: 3,
-    computation_time_ms: 1250,
-  }),
-  "GET /api/v1/match/detail/{match_id}": () => ({
-    match_id: "m-001",
-    request_id: "req-001",
-    vendor_id: "v-001",
-    company_name: "东莞某某电子有限公司",
-    matched_params: [
-      { key: "product_type", label: "产品类型", value: "机顶盒", verdict: "matched" },
-      { key: "os_support", label: "操作系统", value: "Linux", verdict: "matched" },
-      { key: "interfaces", label: "接口", value: "网口,USB,HDMI", verdict: "matched" },
-      { key: "min_order_qty", label: "起订量", value: "5000", verdict: "matched" },
-    ],
-    partial_params: [{ key: "certifications", label: "认证", value: "ISO9001", verdict: "partial" }],
-    unmatched_params: [{ key: "application_scenarios", label: "应用场景", value: "家庭娱乐", verdict: "unmatched" }],
-    ai_comment:
-      "该厂商在机顶盒代工、Linux 系统定制与所需接口（网口/USB/HDMI）上高度匹配，起订量满足要求；认证 ISO9001 具备但未覆盖全部所需项，整体推荐度较高。",
-    explanation_status: "ready",
-  }),
+        matched_params: [
+          { key: "product_type", label: "产品类型", value: "智能音箱", verdict: "matched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 1, source_text: "偏智能音箱/穿戴" },
+        ],
+        partial_params: [],
+        unmatched_params: [
+          { key: "os_support", label: "操作系统", value: "Linux", verdict: "unmatched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 1, source_text: "机顶盒经验较少" },
+        ],
+        ai_comment: "该厂商偏智能音箱/穿戴，机顶盒代工经验较少，关键参数匹配不符，需谨慎评估。",
+        ...base,
+      }
+    }
+    // m-001：东莞某某电子有限公司（默认）
+    return {
+      match_id: "m-001",
+      vendor_id: "v-001",
+      company_name: "东莞某某电子有限公司",
+      matched_params: [
+        { key: "product_type", label: "产品类型", value: "机顶盒", verdict: "matched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 1, source_text: "专注机顶盒/智能音箱 ODM 十余年" },
+        { key: "os_support", label: "操作系统", value: "Linux", verdict: "matched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 1, source_text: "支持 Linux/Android 双系统定制" },
+        { key: "interfaces", label: "接口", value: "网口,USB,HDMI", verdict: "matched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 2, source_text: "支持网口/USB/HDMI 等接口" },
+        { key: "min_order_qty", label: "起订量", value: "5000", verdict: "matched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 2, source_text: "月产能 50 万台，起订量灵活" },
+      ],
+      partial_params: [
+        { key: "certifications", label: "认证", value: "ISO9001", verdict: "partial", source_doc_id: "doc-002", source_doc_name: "认证资质.pdf", source_page: 1, source_text: "已通过 ISO9001 认证" },
+      ],
+      unmatched_params: [
+        { key: "application_scenarios", label: "应用场景", value: "家庭娱乐", verdict: "unmatched", source_doc_id: "doc-001", source_doc_name: "产能介绍.pdf", source_page: 3, source_text: "未提及家庭娱乐类应用场景" },
+      ],
+      ai_comment:
+        "该厂商在机顶盒代工、Linux 系统定制与所需接口（网口/USB/HDMI）上高度匹配，起订量满足要求；认证 ISO9001 具备但未覆盖全部所需项，整体推荐度较高。",
+      ...base,
+    }
+  },
 
   // ---- admin ----
   "POST /api/v1/admin/vendors/{vendor_id}/audit": () => ({

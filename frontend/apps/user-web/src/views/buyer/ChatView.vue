@@ -4,6 +4,7 @@
  * 右侧"当前需求"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
  */
 import { onMounted, ref } from "vue"
+import { useRouter } from "vue-router"
 import { NButton, NInput, NTag, useMessage } from "naive-ui"
 
 import {
@@ -21,10 +22,10 @@ import {
 
 import ChatBubble from "@/components/business/ChatBubble.vue"
 import DemandProfileCard from "@/components/business/DemandProfileCard.vue"
-import MatchResultsModal from "@/components/business/MatchResultsModal.vue"
 import OptionButtonGroup from "@/components/business/OptionButtonGroup.vue"
 
 const message = useMessage()
+const router = useRouter()
 
 const messages = ref<{ role: "assistant" | "user"; content: string; error?: boolean }[]>([])
 const options = ref<string[]>([])
@@ -41,10 +42,8 @@ const confirmPrompted = ref(false)
 // 02A 会话管理：左侧常驻会话列表 + 当前会话高亮
 const sessions = ref<ConversationListItem[]>([])
 const activeId = ref("")
-// 02A 匹配记录：右侧按会话展示匹配记录 + 匹配结果弹窗
+// 02A 匹配记录：右侧按会话展示匹配记录，点击进入匹配结果页
 const records = ref<RequestSnapshot[]>([])
-const modalOpen = ref(false)
-const modalRequestId = ref("")
 
 const STATUS: Record<string, { label: string; type: "success" | "default" | "warning" }> = {
   confirmed: { label: "已确认", type: "success" },
@@ -203,8 +202,8 @@ async function confirm(): Promise<void> {
     message.success("已提交匹配")
     // 02A 匹配记录：不跳页，刷新匹配记录并首次自动弹出结果
     await loadRecords()
-    modalRequestId.value = res.request_id
-    modalOpen.value = true
+    // 提交后进入该次匹配的结果页（返回回会话页）
+    void router.push(`/buyer/matches/${res.request_id}`)
   } catch {
     message.error("提交匹配失败")
   }
@@ -226,8 +225,7 @@ async function loadRecords(): Promise<void> {
 
 /** 02A 匹配记录：点击卡片打开匹配结果弹窗。 */
 function openRecord(requestId: string): void {
-  modalRequestId.value = requestId
-  modalOpen.value = true
+  void router.push(`/buyer/matches/${requestId}`)
 }
 
 /** 匹配记录卡片标题：优先显示匹配产品类型。 */
@@ -351,9 +349,6 @@ onMounted(() => {
         </aside>
       </div>
     </div>
-
-    <!-- 02B 匹配结果弹窗（并入 02A） -->
-    <MatchResultsModal v-model:show="modalOpen" :request-id="modalRequestId" />
   </div>
 </template>
 
@@ -420,7 +415,7 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 .chat-page__rail-meta {
-  margin-top: var(--space-6);
+  margin-top: var(--space-8);
   font-size: var(--font-size-12);
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -563,7 +558,7 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 .chat-page__record-meta {
-  margin-top: var(--space-6);
+  margin-top: var(--space-8);
   font-size: var(--font-size-12);
   color: var(--color-text-secondary);
 }

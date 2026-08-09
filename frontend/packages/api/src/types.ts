@@ -232,15 +232,16 @@ export type MatchComputeResponse = {
   match_results: MatchItem[];
   total_matches: number;
   computation_time_ms: number;
+  demand_points?: DemandPoint[];
 };
 export type MatchDetailResponse = {
   match_id: string;
   request_id: string;
   vendor_id: string;
   company_name: string;
-  matched_params?: Record<string, unknown>[];
-  partial_params?: Record<string, unknown>[];
-  unmatched_params?: Record<string, unknown>[];
+  matched_params?: MatchParam[];
+  partial_params?: MatchParam[];
+  unmatched_params?: MatchParam[];
   ai_comment?: (string | null);
   explanation_status?: "pending" | "ready";
 };
@@ -257,6 +258,16 @@ export type MatchItem = {
   match_source?: "llm" | "rule" | "hybrid";
   matched_count?: number;
   unmatched_count?: number;
+};
+export type MatchParam = {
+  key: string;
+  label: string;
+  value: string;
+  verdict: "matched" | "partial" | "unmatched";
+  source_doc_id?: (string | null);
+  source_doc_name?: (string | null);
+  source_page?: (number | null);
+  source_text?: (string | null);
 };
 export type MessageRequest = {
   conversation_id: string;

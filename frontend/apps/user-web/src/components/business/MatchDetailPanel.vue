@@ -1,11 +1,17 @@
 <script setup lang="ts">
 /**
- * 匹配详情面板（原型 02B / COMP-024/026）：就地展开——子分数副行 + 三组判定 + AI 评语 + 查看原文。
+ * 匹配详情面板（原型 02B / COMP-024）：Drawer 内——子分数副行 + 三组判定（匹配/需协商·厂商未声明/不匹配）
+ * + 行内文档引用（点击全屏预览原文）+ AI 评语 + 查看厂商能力。
  */
-import { computed } from "vue"
-import { NButton, NSpin, NTag } from "naive-ui"
+import { computed, ref } from "vue"
+import { NButton, NModal, NSpin, NTag } from "naive-ui"
 
-import type { MatchDetailResponse, MatchItem } from "@xmsn/types"
+import {
+  documentsDocIdPreview,
+  type DocumentPreviewResponse,
+  type MatchDetailResponse,
+  type MatchItem,
+} from "@xmsn/types"
 
 const props = defineProps<{
   detail: MatchDetailResponse | null
@@ -13,11 +19,13 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
-const emit = defineEmits<{ preview: [] }>()
+const emit = defineEmits<{
+  viewVendor: []
+}>()
 
 const GROUP = [
   { key: "matched_params", title: "匹配项", type: "success" },
-  { key: "partial_params", title: "需协商/未声明", type: "warning" },
+  { key: "partial_params", title: "未声明项", type: "warning" },
   { key: "unmatched_params", title: "不匹配项", type: "error" },
 ] as const
 
@@ -30,6 +38,24 @@ const hitText = computed(() => {
     (props.detail?.unmatched_params?.length ?? 0)
   return `参数命中 ${matched}/${total}`
 })
+
+// 行内文档引用 → 全屏预览（原文定位高亮）
+const previewOpen = ref(false)
+const previewLoading = ref(false)
+const preview = ref<DocumentPreviewResponse | null>(null)
+
+async function openPreview(sourceDocId?: string | null, sourcePage?: number | null): Promise<void> {
+  previewOpen.value = true
+  previewLoading.value = true
+  preview.value = null
+  try {
+    preview.value = await documentsDocIdPreview(sourceDocId ?? "doc-001", sourcePage ?? 1)
+  } catch {
+    preview.value = null
+  } finally {
+    previewLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -41,13 +67,16 @@ const hitText = computed(() => {
         </div>
         <div class="match-detail__head">
           <h3>{{ detail.company_name }}</h3>
-          <span class="match-detail__status">
-            解释状态：{{ detail.explanation_status === "ready" ? "已生成" : "生成中…" }}
-          </span>
+          <span class="match-detail__vendor" @click="emit('viewVendor')">厂商详情</span>
         </div>
         <div class="match-detail__subrow">
           语义相似度 {{ semanticPct }}% · {{ hitText }}
         </div>
+
+        <section v-if="detail.ai_comment" class="match-detail__comment">
+          <h4>匹配概要</h4>
+          <p>{{ detail.ai_comment }}</p>
+        </section>
 
         <section v-for="g in GROUP" :key="g.key" class="match-detail__group">
           <h4>
@@ -57,36 +86,49 @@ const hitText = computed(() => {
             <li v-for="(p, i) in detail[g.key]" :key="i">
               <span class="k">{{ p.label }}</span>
               <span class="v">{{ p.value }}</span>
-              <NTag size="tiny" :type="g.type" :bordered="false">{{ p.verdict ?? "—" }}</NTag>
+              <!-- 行内文档引用（判定可溯源到厂商原始文档；删除冗余 verdict 标签） -->
+              <NButton
+                v-if="p.source_page !== undefined && p.source_page !== null"
+                text
+                size="tiny"
+                class="cite"
+                @click="openPreview(p.source_doc_id, p.source_page)"
+              >
+                📄 第 {{ p.source_page }} 页
+              </NButton>
             </li>
           </ul>
           <div v-else class="match-detail__empty">无</div>
         </section>
-
-        <section v-if="detail.ai_comment" class="match-detail__comment">
-          <h4>AI 评语</h4>
-          <p>{{ detail.ai_comment }}</p>
-        </section>
-
-        <NButton block dashed size="small" @click="emit('preview')">
-          查看原文（定位高亮）
-        </NButton>
       </template>
       <template v-else>
         <div class="match-detail__empty">理由生成中…</div>
       </template>
     </NSpin>
+
+    <!-- 全屏文档预览（引用原文定位高亮） -->
+    <NModal
+      v-model:show="previewOpen"
+      preset="card"
+      title="厂商原始文档"
+      style="width: 94vw; max-width: 1400px; height: 92vh"
+    >
+      <NSpin :show="previewLoading">
+        <template v-if="preview">
+          <div class="preview__meta">{{ preview.doc_name }} · 第 {{ preview.page }} 页</div>
+          <p class="preview__content">{{ preview.content }}</p>
+          <mark class="preview__highlight">{{ preview.highlight }}</mark>
+        </template>
+      </NSpin>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
 .match-detail {
-  padding: var(--space-16);
-  background: var(--color-bg-panel);
-  border: var(--border-width-1) solid var(--color-border-subtle);
-  border-top: none;
-  border-radius: 0 0 var(--radius-12) var(--radius-12);
-  margin-top: calc(-1 * var(--border-width-1));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
 }
 .match-detail__alert {
   padding: var(--space-8) var(--space-12);
@@ -108,9 +150,14 @@ const hitText = computed(() => {
   margin: 0;
   font-size: var(--font-size-18);
 }
-.match-detail__status {
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
+.match-detail__vendor {
+  color: var(--color-primary);
+  font-size: var(--font-size-13);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.match-detail__vendor:hover {
+  text-decoration: underline;
 }
 .match-detail__subrow {
   padding: var(--space-8) var(--space-12);
@@ -122,6 +169,9 @@ const hitText = computed(() => {
 }
 .match-detail__group {
   margin-bottom: var(--space-16);
+}
+.match-detail__comment {
+  margin-bottom: var(--space-24);
 }
 .match-detail__group h4,
 .match-detail__comment h4 {
@@ -164,5 +214,37 @@ const hitText = computed(() => {
   border-left: 3px solid var(--color-primary);
   padding: var(--space-12);
   border-radius: var(--radius-8);
+}
+.cite {
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+.preview {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-24);
+}
+.preview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-16);
+}
+.preview__head h3 {
+  margin: 0;
+  font-size: var(--font-size-20);
+}
+.preview__meta {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-8);
+}
+.preview__content {
+  line-height: var(--line-height-loose);
+}
+.preview__highlight {
+  background: var(--color-warning-bg);
+  padding: 0 4px;
+  border-radius: var(--radius-4);
 }
 </style>
