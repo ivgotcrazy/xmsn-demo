@@ -582,6 +582,53 @@
         ]
       }
     },
+    "/api/v1/conversation/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "会话消息历史（02A 切换会话恢复现场）",
+        "operationId": "list_messages_api_v1_conversation__conversation_id__messages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConversationMessagesResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/conversation/{conversation_id}/requests": {
       "get": {
         "tags": [
@@ -1312,6 +1359,32 @@
         "type": "object",
         "title": "ApiResponse[ConversationListResponse]"
       },
+      "ApiResponse_ConversationMessagesResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationMessagesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[ConversationMessagesResponse]"
+      },
       "ApiResponse_ConversationStartResponse_": {
         "properties": {
           "code": {
@@ -1950,6 +2023,112 @@
           "total"
         ],
         "title": "ConversationListResponse"
+      },
+      "ConversationMessageItem": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "assistant",
+              "user"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "error": {
+            "type": "boolean",
+            "title": "Error",
+            "default": false
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options",
+            "description": "仅末条助手消息可带候选选项"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ConversationMessageItem",
+        "description": "会话内单条消息（02A 会话切换恢复现场用）。"
+      },
+      "ConversationMessagesResponse": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "confirmed",
+              "closed"
+            ],
+            "title": "Status"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessageItem"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "current_slots": {
+            "type": "object",
+            "title": "Current Slots"
+          },
+          "slot_confidence": {
+            "type": "object",
+            "title": "Slot Confidence"
+          },
+          "excluded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded"
+          },
+          "unset_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unset Fields"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "confirm_prompted": {
+            "type": "boolean",
+            "title": "Confirm Prompted",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "status",
+          "messages"
+        ],
+        "title": "ConversationMessagesResponse",
+        "description": "会话完整现场：消息气泡 + 当前需求槽位 + 档案版本（02A 点击会话切换恢复）。"
       },
       "ConversationStartRequest": {
         "properties": {

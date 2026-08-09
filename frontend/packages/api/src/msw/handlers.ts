@@ -60,6 +60,10 @@ export const handlers = [
     const data = await resolveMock("POST /api/v1/conversation/confirm", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
+  http.get("*/api/v1/conversation/:conversation_id/messages", async ({ request }) => {
+    const data = await resolveMock("GET /api/v1/conversation/{conversation_id}/messages", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
   http.get("*/api/v1/conversation/:conversation_id/requests", async ({ request }) => {
     const data = await resolveMock("GET /api/v1/conversation/{conversation_id}/requests", request)
     return HttpResponse.json({ code: 0, message: "ok", data })

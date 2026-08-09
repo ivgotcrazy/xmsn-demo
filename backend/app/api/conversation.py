@@ -9,6 +9,7 @@ from app.schemas.conversation import (
     ConfirmRequest,
     ConfirmResponse,
     ConversationListResponse,
+    ConversationMessagesResponse,
     ConversationStartRequest,
     ConversationStartResponse,
     FinishResponse,
@@ -45,6 +46,11 @@ async def confirm(payload: ConfirmRequest, user: CurrentUser) -> ApiResponse[Con
 # ---- 历史（6.3.5）----
 @list_router.get("", response_model=ApiResponse[ConversationListResponse], summary="买家会话列表")
 async def list_conversations(user: CurrentUser) -> ApiResponse[ConversationListResponse]:
+    raise err_501("契约层占位：M3 实现")
+
+
+@router.get("/{conversation_id}/messages", response_model=ApiResponse[ConversationMessagesResponse], summary="会话消息历史（02A 切换会话恢复现场）")
+async def list_messages(conversation_id: str, user: CurrentUser) -> ApiResponse[ConversationMessagesResponse]:
     raise err_501("契约层占位：M3 实现")
 
 

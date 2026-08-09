@@ -98,9 +98,7 @@ function logout(): void {
 .main-layout__content {
   flex: 1;
   width: 100%;
-  max-width: var(--breakpoint-lg);
-  margin: 0 auto;
-  padding: var(--space-24);
+  padding: var(--space-12);
   box-sizing: border-box;
 }
 </style>

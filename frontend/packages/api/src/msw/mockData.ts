@@ -142,8 +142,9 @@ export const mockData: Record<string, MockResolver | unknown> = {
   }),
 
   // ---- conversation ----
+  // 新建会话：返回新会话 conv-003 与开场语（前端插入列表顶部并高亮）
   "POST /api/v1/conversation/start": () => ({
-    conversation_id: "conv-001",
+    conversation_id: "conv-003",
     first_message: {
       role: "assistant",
       content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？",
@@ -219,6 +220,72 @@ export const mockData: Record<string, MockResolver | unknown> = {
     ],
     total: 2,
   }),
+  "GET /api/v1/conversation/{conversation_id}/messages": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const id = parts[parts.length - 2] ?? ""
+    // conv-001：已确认完整现场（已生成 v1 档案）
+    if (id === "conv-001") {
+      return {
+        conversation_id: "conv-001",
+        status: "confirmed",
+        messages: [
+          { role: "assistant", content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？", options: ["机顶盒", "智能音箱", "IoT设备", "其他"] },
+          { role: "user", content: "机顶盒" },
+          { role: "assistant", content: "好的，机顶盒代工，需要 Linux 系统。请问您需要哪些接口？", options: ["网口", "USB", "HDMI", "GPIO"] },
+          { role: "user", content: "网口、USB" },
+          { role: "assistant", content: "接口已记录：网口、USB。起订量大概多少？" },
+          { role: "user", content: "5000 台" },
+          { role: "assistant", content: "核心需求已明确，确认完成？还是继续补充？", options: ["确认完成", "继续补充"] },
+          { role: "user", content: "确认完成" },
+          { role: "assistant", content: "已生成需求档案 v1" },
+        ],
+        current_slots: {
+          product_type: "机顶盒",
+          os_support: ["Linux"],
+          interfaces: ["网口", "USB"],
+          min_order_qty: 5000,
+          certifications: ["ISO9001"],
+        },
+        slot_confidence: { product_type: 1.0, os_support: 1.0, interfaces: 1.0, min_order_qty: 1.0, certifications: 0.9 },
+        excluded: [],
+        unset_fields: ["lead_time_days", "application_scenarios"],
+        version: 1,
+        confirm_prompted: true,
+      }
+    }
+    // conv-002：进行中（未完成档案）
+    if (id === "conv-002") {
+      return {
+        conversation_id: "conv-002",
+        status: "active",
+        messages: [
+          { role: "assistant", content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？", options: ["机顶盒", "智能音箱", "IoT设备", "其他"] },
+          { role: "user", content: "智能音箱" },
+          { role: "assistant", content: "智能音箱代工，需要什么操作系统？", options: ["Linux", "Android", "RTOS"] },
+          { role: "user", content: "Linux" },
+          { role: "assistant", content: "好的，Linux 系统已记录。还需要补充其他要求吗？" },
+        ],
+        current_slots: { product_type: "智能音箱", os_support: ["Linux"] },
+        slot_confidence: { product_type: 1.0, os_support: 1.0 },
+        excluded: [],
+        unset_fields: [],
+        version: null,
+        confirm_prompted: true,
+      }
+    }
+    // 其他（如新建会话 conv-003）：空现场
+    return {
+      conversation_id: id,
+      status: "active",
+      messages: [],
+      current_slots: {},
+      slot_confidence: {},
+      excluded: [],
+      unset_fields: [],
+      version: null,
+      confirm_prompted: false,
+    }
+  },
 
   // ---- match ----
   "POST /api/v1/match/compute": () => ({

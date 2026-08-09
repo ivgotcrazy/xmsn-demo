@@ -1,7 +1,7 @@
 /* 生成物（只读勿手改）—— 由 scripts/generate.ts 从 openapi.json 契约快照生成 */
 /* API 客户端：统一经 http.request 封装（JWT 注入 + 统一响应 {code,message,data} 解包） */
 import { request } from "./http"
-import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, FinishResponse, ConfirmRequest, ConfirmResponse, RequestSnapshotListResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, DocumentPreviewResponse } from "./types"
+import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, FinishResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, DocumentPreviewResponse } from "./types"
 
 export async function healthz(): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>("/healthz", { method: "GET" })
@@ -57,6 +57,10 @@ export async function conversationFinish(body: MessageRequest): Promise<FinishRe
 
 export async function conversationConfirm(body: ConfirmRequest): Promise<ConfirmResponse> {
   return request<ConfirmResponse>("/api/v1/conversation/confirm", { method: "POST", body })
+}
+
+export async function conversationConversationIdMessages(conversationId: string): Promise<ConversationMessagesResponse> {
+  return request<ConversationMessagesResponse>(`/api/v1/conversation/${conversationId}/messages`, { method: "GET" })
 }
 
 export async function conversationConversationIdRequests(conversationId: string): Promise<RequestSnapshotListResponse> {

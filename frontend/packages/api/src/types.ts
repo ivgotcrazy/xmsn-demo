@@ -55,6 +55,11 @@ export type ApiResponse_ConversationListResponse_ = {
   message?: string;
   data?: (ConversationListResponse | null);
 };
+export type ApiResponse_ConversationMessagesResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (ConversationMessagesResponse | null);
+};
 export type ApiResponse_ConversationStartResponse_ = {
   code?: number;
   message?: string;
@@ -172,6 +177,23 @@ export type ConversationListItem = {
 export type ConversationListResponse = {
   conversations: ConversationListItem[];
   total: number;
+};
+export type ConversationMessageItem = {
+  role: "assistant" | "user";
+  content: string;
+  error?: boolean;
+  options?: string[];
+};
+export type ConversationMessagesResponse = {
+  conversation_id: string;
+  status: "active" | "confirmed" | "closed";
+  messages: ConversationMessageItem[];
+  current_slots?: Record<string, unknown>;
+  slot_confidence?: Record<string, unknown>;
+  excluded?: string[];
+  unset_fields?: string[];
+  version?: (number | null);
+  confirm_prompted?: boolean;
 };
 export type ConversationStartRequest = {
   user_id: string;

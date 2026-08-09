@@ -90,12 +90,6 @@ const routes = [
         meta: { title: "匹配结果" },
       },
       {
-        path: "sessions",
-        name: "buyer-sessions",
-        component: () => import("@/views/buyer/SessionsView.vue"),
-        meta: { title: "我的会话" },
-      },
-      {
         path: "history",
         name: "buyer-history",
         component: () => import("@/views/buyer/HistoryView.vue"),

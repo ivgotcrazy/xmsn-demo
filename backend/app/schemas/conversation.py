@@ -70,6 +70,29 @@ class ConversationListResponse(BaseModel):
     total: int
 
 
+class ConversationMessageItem(BaseModel):
+    """会话内单条消息（02A 会话切换恢复现场用）。"""
+
+    role: Literal["assistant", "user"]
+    content: str
+    error: bool = False
+    options: list[str] = Field(default_factory=list, description="仅末条助手消息可带候选选项")
+
+
+class ConversationMessagesResponse(BaseModel):
+    """会话完整现场：消息气泡 + 当前需求槽位 + 档案版本（02A 点击会话切换恢复）。"""
+
+    conversation_id: str
+    status: Literal["active", "confirmed", "closed"]
+    messages: list[ConversationMessageItem]
+    current_slots: dict = Field(default_factory=dict)
+    slot_confidence: dict = Field(default_factory=dict)
+    excluded: list[str] = Field(default_factory=list)
+    unset_fields: list[str] = Field(default_factory=list)
+    version: int | None = None
+    confirm_prompted: bool = False
+
+
 class RequestSnapshot(BaseModel):
     request_id: str
     version: int
