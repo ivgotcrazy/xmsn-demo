@@ -40,6 +40,10 @@ export const handlers = [
     const data = await resolveMock("GET /api/v1/vendor/capability/{vendor_id}", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
+  http.delete("*/api/v1/vendor/capability/:vendor_id/documents/:document_id", async ({ request }) => {
+    const data = await resolveMock("DELETE /api/v1/vendor/capability/{vendor_id}/documents/{document_id}", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
   http.post("*/api/v1/files/upload", async ({ request }) => {
     const data = await resolveMock("POST /api/v1/files/upload", request)
     return HttpResponse.json({ code: 0, message: "ok", data })

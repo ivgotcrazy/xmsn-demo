@@ -460,9 +460,14 @@ onMounted(() => {
                 暂无匹配结果，完成需求并提交匹配后生成
               </div>
               <div v-else class="chat-page__records-list">
-                <div v-for="r in records" :key="r.request_id" class="chat-page__record">
+                <div
+                  v-for="r in records"
+                  :key="r.request_id"
+                  class="chat-page__record"
+                  @click="openRecord(r.request_id)"
+                >
                   <div class="chat-page__record-top">
-                    <span class="chat-page__record-name" @click="openRecord(r.request_id)">
+                    <span class="chat-page__record-name">
                       {{ recordTitle(r) }}
                     </span>
                     <NPopconfirm

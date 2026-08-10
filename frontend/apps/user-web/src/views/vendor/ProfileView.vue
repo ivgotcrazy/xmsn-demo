@@ -1,19 +1,25 @@
 <script setup lang="ts">
 /**
- * 01D 能力档案（只读，原型三栏）：左"原始输入" / 中"AI提取的结构化标签" / 右"一句话能力摘要"。
- * 顶部状态徽标；底部仅"返回控制台"；加载骨架屏（COMP-016）。
+ * 01D 能力档案（只读，独立页）：档案元信息（版本/更新时间/文档数）+ 一句话摘要 + 综合评估（文字）+ Schema 驱动能力字段列表 + 原始文档。
+ * 加载骨架屏（COMP-016）。
  */
 import { onMounted, ref } from "vue"
-import { useRouter } from "vue-router"
-import { NButton, NSkeleton, NTag } from "naive-ui"
+import { NSkeleton } from "naive-ui"
 
 import { vendorCapabilityVendorId, type CapabilityOut } from "@xmsn/api"
 
 import VendorCapabilityProfile from "@/components/business/VendorCapabilityProfile.vue"
 
-const router = useRouter()
 const cap = ref<CapabilityOut | null>(null)
 const loading = ref(true)
+
+function fmtTime(iso?: string | null): string {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "—"
+  const pad = (n: number): string => String(n).padStart(2, "0")
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 onMounted(async () => {
   try {
@@ -28,9 +34,11 @@ onMounted(async () => {
   <div class="profile">
     <div class="profile__head">
       <h2>能力档案</h2>
-      <NTag v-if="cap" :type="cap.audit_status === 'passed' ? 'success' : 'warning'" :bordered="false">
-        {{ cap.audit_status === "passed" ? "已通过" : "审核中" }}
-      </NTag>
+      <div v-if="cap" class="profile__meta">
+        <span class="profile__version">v{{ cap.version }}</span>
+        <span class="profile__time">更新于 {{ fmtTime(cap.updated_at) }}</span>
+        <span class="profile__docs">基于 {{ cap.doc_count }} 份文档</span>
+      </div>
     </div>
 
     <div v-if="loading" class="profile__skeleton">
@@ -38,16 +46,12 @@ onMounted(async () => {
     </div>
 
     <VendorCapabilityProfile v-else :capability="cap" />
-
-    <div class="profile__actions">
-      <NButton @click="router.push('/vendor/dashboard')">返回控制台</NButton>
-    </div>
   </div>
 </template>
 
 <style scoped>
 .profile {
-  max-width: 960px;
+  width: 100%;
 }
 .profile__head {
   display: flex;
@@ -59,10 +63,23 @@ onMounted(async () => {
   margin: 0;
   font-size: var(--font-size-20);
 }
+.profile__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+.profile__version {
+  font-weight: var(--font-weight-600);
+  color: var(--color-primary);
+  font-size: var(--font-size-13);
+}
+.profile__time,
+.profile__docs {
+  white-space: nowrap;
+}
 .profile__skeleton {
   padding: var(--space-16);
-}
-.profile__actions {
-  margin-top: var(--space-24);
 }
 </style>

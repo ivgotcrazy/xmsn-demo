@@ -177,8 +177,6 @@ export type Body_upload_api_v1_files_upload_post = {
 };
 export type Body_upload_capability_api_v1_vendor_capability_upload_post = {
   vendor_id: string;
-  form_data?: string;
-  free_text?: string;
   documents?: string[];
 };
 export type BuyerItem = {
@@ -203,6 +201,11 @@ export type CapabilityOut = {
   structured_tags?: Record<string, unknown>;
   summary_text?: (string | null);
   audit_status?: "pending" | "passed" | "rejected";
+  version?: number;
+  updated_at?: string;
+  doc_count?: number;
+  completeness?: (number | null);
+  source_map?: Record<string, unknown>;
   raw_text?: (string | null);
   doc_urls?: string[];
 };

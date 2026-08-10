@@ -274,7 +274,7 @@
         "tags": [
           "vendor"
         ],
-        "summary": "能力录入（三步合一提交）",
+        "summary": "能力录入（仅上传文档，AI 解析）",
         "operationId": "upload_capability_api_v1_vendor_capability_upload_post",
         "requestBody": {
           "content": {
@@ -330,6 +330,57 @@
             "schema": {
               "type": "string",
               "title": "Vendor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CapabilityOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vendor/capability/{vendor_id}/documents/{document_id}": {
+      "delete": {
+        "tags": [
+          "vendor"
+        ],
+        "summary": "删除能力文档（触发重新解析，版本+1）",
+        "operationId": "delete_capability_document_api_v1_vendor_capability__vendor_id__documents__document_id__delete",
+        "parameters": [
+          {
+            "name": "vendor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vendor Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
             }
           }
         ],
@@ -2288,16 +2339,6 @@
             "type": "string",
             "title": "Vendor Id"
           },
-          "form_data": {
-            "type": "string",
-            "title": "Form Data",
-            "default": "{}"
-          },
-          "free_text": {
-            "type": "string",
-            "title": "Free Text",
-            "default": ""
-          },
           "documents": {
             "items": {
               "type": "string",
@@ -2447,6 +2488,41 @@
             "title": "Audit Status",
             "default": "pending"
           },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "档案版本号：每次重新解析（增/删文档）递增",
+            "default": 1
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "档案生成时间"
+          },
+          "doc_count": {
+            "type": "integer",
+            "title": "Doc Count",
+            "description": "本次档案基于的文档数",
+            "default": 0
+          },
+          "completeness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completeness",
+            "description": "能力完备度：硬能力已提取字段/硬能力总数 0-1"
+          },
+          "source_map": {
+            "type": "object",
+            "title": "Source Map",
+            "description": "能力字段 → 文档来源（含字段级解析置信度 confidence 0-1，<0.6 低置信度）"
+          },
           "raw_text": {
             "anyOf": [
               {
@@ -2457,7 +2533,7 @@
               }
             ],
             "title": "Raw Text",
-            "description": "自由文本片段（Step2）"
+            "description": "文档原文片段"
           },
           "doc_urls": {
             "items": {
@@ -2465,7 +2541,7 @@
             },
             "type": "array",
             "title": "Doc Urls",
-            "description": "文档名列表（Step3）"
+            "description": "文档名列表"
           }
         },
         "type": "object",
@@ -2474,7 +2550,7 @@
           "vendor_id"
         ],
         "title": "CapabilityOut",
-        "description": "厂商能力档案（只读，原型 01D 三栏：原始输入 / AI结构化标签 / 一句话摘要）。"
+        "description": "厂商能力档案（只读，01D）：AI 从文档解析，硬/软能力分层，全部可溯源到文档。"
       },
       "ConfirmRequest": {
         "properties": {

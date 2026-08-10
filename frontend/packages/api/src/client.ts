@@ -39,6 +39,10 @@ export async function vendorCapabilityVendorId(vendorId: string): Promise<Capabi
   return request<CapabilityOut>(`/api/v1/vendor/capability/${vendorId}`, { method: "GET" })
 }
 
+export async function vendorCapabilityVendorIdDocumentsDocumentId(vendorId: string, documentId: string): Promise<CapabilityOut> {
+  return request<CapabilityOut>(`/api/v1/vendor/capability/${vendorId}/documents/${documentId}`, { method: "DELETE" })
+}
+
 export async function filesUpload(): Promise<UploadResult> {
   return request<UploadResult>("/api/v1/files/upload", { method: "POST" })
 }

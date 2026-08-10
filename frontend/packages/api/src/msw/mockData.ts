@@ -106,6 +106,48 @@ const deletedRequests = new Set<string>()
 
 const deletedAt = (): string => new Date().toISOString()
 
+// capability 演示状态（仅 dev mock）：文档集合 + 档案版本，增/删文档触发重新解析（version+1）
+const capDemoDocs: string[] = ["产能介绍.pdf", "认证资质.pdf"]
+let capDemoVersion = 3
+const capNow = (): string => new Date().toISOString()
+
+function buildCapabilityDoc(vendorId: string, docs: string[], version: number, audit: string) {
+  return {
+    capability_id: "cap-001",
+    vendor_id: vendorId,
+    structured_tags: {
+      product_types: ["机顶盒", "智能音箱", "IoT设备"],
+      process_types: ["SMT贴片", "组装测试", "整机包装"],
+      certifications: ["ISO9001", "ISO14001"],
+      os_support: ["Linux", "Android"],
+      interfaces: ["网口", "USB", "HDMI"],
+      moq: 3000,
+      lead_time_days: 20,
+      application_scenarios: ["家庭娱乐", "智能家居"],
+    },
+    summary_text:
+      "珠三角10年电子代工经验，专注机顶盒/智能音箱 ODM，具备 SMT+整机组装测试一体化能力，支持 Linux/Android 定制，月产能 50 万台。",
+    version,
+    updated_at: capNow(),
+    doc_count: docs.length,
+    completeness: 0.857,
+    source_map: {
+      process_types: { doc_name: "产能介绍.pdf", page: 1, confidence: 0.92 },
+      certifications: { doc_name: "认证资质.pdf", page: 1, confidence: 0.9 },
+      os_support: { doc_name: "产能介绍.pdf", page: 2, confidence: 0.88 },
+      interfaces: { doc_name: "产能介绍.pdf", page: 2, confidence: 0.85 },
+      lead_time_days: { doc_name: "产能介绍.pdf", page: 3, confidence: 0.78 },
+      moq: { doc_name: "产能介绍.pdf", page: 1, confidence: 0.5 },
+      product_types: { doc_name: "产能介绍.pdf", page: 1, confidence: 0.8 },
+      application_scenarios: { doc_name: "产能介绍.pdf", page: 2, confidence: 0.72 },
+    },
+    raw_text:
+      "本公司专注机顶盒/智能音箱 ODM 十余年，拥有 8 条 SMT 贴片线与组装测试一体化车间，支持 Linux/Android 双系统定制，月产能 50 万台。",
+    doc_urls: docs,
+    audit_status: audit,
+  }
+}
+
 export const mockData: Record<string, MockResolver | unknown> = {
   // ---- auth ----
   "POST /api/v1/auth/login": (request: Request) =>
@@ -176,46 +218,41 @@ export const mockData: Record<string, MockResolver | unknown> = {
     }
     return VENDORS[id] ?? VENDORS["v-001"]
   },
-  "POST /api/v1/vendor/capability/upload": () => ({
-    capability_id: "cap-001",
-    vendor_id: "v-001",
-    structured_tags: {
-      product_types: ["机顶盒", "智能音箱", "IoT设备"],
-      process_types: ["SMT贴片", "组装测试", "整机包装"],
-      certifications: ["ISO9001", "ISO14001"],
-      os_support: ["Linux", "Android"],
-      interfaces: ["网口", "USB", "HDMI"],
-      min_order_qty: 3000,
-      lead_time_days: 20,
-      application_scenarios: ["家庭娱乐", "智能家居"],
-    },
-    summary_text:
-      "珠三角10年电子代工经验，专注机顶盒/智能音箱 ODM，具备 SMT+整机组装测试一体化能力，支持 Linux/Android 定制，月产能 50 万台。",
-    raw_text:
-      "本公司专注机顶盒/智能音箱 ODM 十余年，拥有 8 条 SMT 贴片线与组装测试一体化车间，支持 Linux/Android 双系统定制，月产能 50 万台。",
-    doc_urls: ["产能介绍.pdf", "认证资质.pdf"],
-    audit_status: "pending",
-  }),
-  "GET /api/v1/vendor/capability/{vendor_id}": () => ({
-    capability_id: "cap-001",
-    vendor_id: "v-001",
-    structured_tags: {
-      product_types: ["机顶盒", "智能音箱", "IoT设备"],
-      process_types: ["SMT贴片", "组装测试", "整机包装"],
-      certifications: ["ISO9001", "ISO14001"],
-      os_support: ["Linux", "Android"],
-      interfaces: ["网口", "USB", "HDMI"],
-      min_order_qty: 3000,
-      lead_time_days: 20,
-      application_scenarios: ["家庭娱乐", "智能家居"],
-    },
-    summary_text:
-      "珠三角10年电子代工经验，专注机顶盒/智能音箱 ODM，具备 SMT+整机组装测试一体化能力，支持 Linux/Android 定制，月产能 50 万台。",
-    raw_text:
-      "本公司专注机顶盒/智能音箱 ODM 十余年，拥有 8 条 SMT 贴片线与组装测试一体化车间，支持 Linux/Android 双系统定制，月产能 50 万台。",
-    doc_urls: ["产能介绍.pdf", "认证资质.pdf"],
-    audit_status: "passed",
-  }),
+  "POST /api/v1/vendor/capability/upload": (request: Request) =>
+    request
+      .formData()
+      .then((fd) => {
+        const files = fd.getAll("documents") as File[]
+        const names = files.length ? files.map((f) => f.name) : ["产能介绍.pdf", "认证资质.pdf"]
+        names.forEach((n) => {
+          if (!capDemoDocs.includes(n)) capDemoDocs.push(n)
+        })
+        capDemoVersion += 1
+        return buildCapabilityDoc((fd.get("vendor_id") as string) ?? "v-001", [...capDemoDocs], capDemoVersion, "pending")
+      })
+      .catch(() => ({
+        capability_id: "cap-001",
+        vendor_id: "v-001",
+        structured_tags: {},
+        summary_text: "",
+        version: capDemoVersion,
+        updated_at: capNow(),
+        doc_count: 0,
+        completeness: 0,
+        source_map: {},
+        doc_urls: [],
+        audit_status: "pending",
+      })),
+  "GET /api/v1/vendor/capability/{vendor_id}": () =>
+    buildCapabilityDoc("v-001", [...capDemoDocs], capDemoVersion, "passed"),
+  "DELETE /api/v1/vendor/capability/{vendor_id}/documents/{document_id}": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const docId = decodeURIComponent(parts[parts.length - 1] ?? "")
+    const idx = capDemoDocs.indexOf(docId)
+    if (idx >= 0) capDemoDocs.splice(idx, 1)
+    capDemoVersion += 1
+    return buildCapabilityDoc("v-001", [...capDemoDocs], capDemoVersion, "passed")
+  },
 
   // ---- files ----
   "POST /api/v1/files/upload": () => ({

@@ -14,8 +14,8 @@ const auth = useAuthStore()
 
 const menus = [
   { key: "/vendor/dashboard", label: "控制台" },
-  { key: "/vendor/capability", label: "录入能力" },
-  { key: "/vendor/profile", label: "我的档案" },
+  { key: "/vendor/capability", label: "能力录入" },
+  { key: "/vendor/profile", label: "能力档案" },
 ]
 
 function go(key: string): void {
