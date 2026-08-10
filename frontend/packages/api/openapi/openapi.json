@@ -2053,6 +2053,18 @@
             "type": "array",
             "title": "Options",
             "description": "仅末条助手消息可带候选选项"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
           }
         },
         "type": "object",

@@ -183,6 +183,7 @@ export type ConversationMessageItem = {
   content: string;
   error?: boolean;
   options?: string[];
+  created_at?: (string | null);
 };
 export type ConversationMessagesResponse = {
   conversation_id: string;

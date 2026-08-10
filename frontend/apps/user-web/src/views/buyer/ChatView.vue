@@ -11,10 +11,10 @@ import {
   conversationConfirm,
   conversationConversationIdMessages,
   conversationConversationIdRequests,
-  conversationFinish,
   conversationMessage,
   conversationStart,
   conversations,
+  filesUpload,
   type ConversationListItem,
   type DemandPoint,
   type RequestSnapshot,
@@ -27,7 +27,7 @@ import OptionButtonGroup from "@/components/business/OptionButtonGroup.vue"
 const message = useMessage()
 const router = useRouter()
 
-const messages = ref<{ role: "assistant" | "user"; content: string; error?: boolean }[]>([])
+const messages = ref<{ role: "assistant" | "user"; content: string; error?: boolean; created_at?: string }[]>([])
 const options = ref<string[]>([])
 const input = ref("")
 // 前端「当前需求」：基于会话历史萃取的需求点集合（不感知 schema）
@@ -44,6 +44,36 @@ const sessions = ref<ConversationListItem[]>([])
 const activeId = ref("")
 // 02A 匹配记录：右侧按会话展示匹配记录，点击进入匹配结果页
 const records = ref<RequestSnapshot[]>([])
+// 匹配记录卡片独立收起（收起方向与当前需求相反）
+const recordsCollapsed = ref(false)
+// 聊天输入框：附件（demo：mock 上传，展示附件条）
+const attachments = ref<{ name: string; fileId: string }[]>([])
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function chooseAttachment(): void {
+  fileInput.value?.click()
+}
+
+async function onFileSelected(e: Event): Promise<void> {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  target.value = ""
+  if (!file) return
+  uploading.value = true
+  try {
+    const res = await filesUpload()
+    attachments.value.push({ name: res.name ?? file.name, fileId: res.file_id })
+  } catch {
+    message.error("上传附件失败")
+  } finally {
+    uploading.value = false
+  }
+}
+
+function removeAttachment(name: string): void {
+  attachments.value = attachments.value.filter((a) => a.name !== name)
+}
 
 const STATUS: Record<string, { label: string; type: "success" | "default" | "warning" }> = {
   confirmed: { label: "已确认", type: "success" },
@@ -60,6 +90,36 @@ function statusType(s: string): "success" | "default" | "warning" {
 /** 产品类型前置校验：需求点中是否已明确产品类型（匹配锚点）。 */
 function hasProductType(): boolean {
   return demandPoints.value.some((p) => p.key === "product_type" && p.value !== "")
+}
+
+/** 时间分组条：组首（首条 / 跨天 / 距上条超 5 分钟）显示，格式 当天 HH:mm / 昨天 HH:mm / MM-DD HH:mm。 */
+const GROUP_GAP_MS = 5 * 60 * 1000
+function showTimeDivider(index: number): boolean {
+  const cur = messages.value[index]
+  if (!cur?.created_at) return false
+  if (index === 0) return true
+  const prev = messages.value[index - 1]
+  if (!prev?.created_at) return true
+  const a = new Date(cur.created_at)
+  const b = new Date(prev.created_at)
+  if (a.toDateString() !== b.toDateString()) return true
+  return a.getTime() - b.getTime() > GROUP_GAP_MS
+}
+function formatDividerTime(iso?: string): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.round((today.getTime() - that.getTime()) / 86400000)
+  if (diffDays <= 0) return hm
+  if (diffDays === 1) return `昨天 ${hm}`
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hm}`
+}
+function pad2(n: number): string {
+  return String(n).padStart(2, "0")
 }
 
 async function init(): Promise<void> {
@@ -89,6 +149,7 @@ async function openConversation(id: string): Promise<void> {
       role: m.role,
       content: m.content,
       error: m.error ?? false,
+      created_at: m.created_at ?? undefined,
     }))
     const last = [...(res.messages ?? [])].reverse().find((m) => m.role === "assistant")
     options.value = last?.options ?? []
@@ -110,7 +171,7 @@ async function newSession(): Promise<void> {
   try {
     const res = await conversationStart({ user_id: "u-buyer-001" })
     conversationId.value = res.conversation_id
-    messages.value = [{ role: "assistant", content: res.first_message.content }]
+    messages.value = [{ role: "assistant", content: res.first_message.content, created_at: new Date().toISOString() }]
     options.value = res.first_message.options ?? []
     demandPoints.value = res.demand_points ?? []
     version.value = null
@@ -131,18 +192,27 @@ async function newSession(): Promise<void> {
   }
 }
 
+/** Shift+Enter 发送（防误发）；普通 Enter 换行。 */
+function onEnter(e: KeyboardEvent): void {
+  if (e.shiftKey) {
+    e.preventDefault()
+    void send()
+  }
+}
+
 async function send(text?: string): Promise<void> {
   const content = (text ?? input.value).trim()
   if (!content || sending.value) return
-  messages.value.push({ role: "user", content })
+  messages.value.push({ role: "user", content, created_at: new Date().toISOString() })
   input.value = ""
+  attachments.value = []
   sending.value = true
   try {
     const res = await conversationMessage({
       conversation_id: conversationId.value,
       message: content,
     })
-    messages.value.push({ role: "assistant", content: res.assistant_message.content })
+    messages.value.push({ role: "assistant", content: res.assistant_message.content, created_at: new Date().toISOString() })
     options.value = res.assistant_message.options ?? []
     // 前端「当前需求」：全量替换为萃取出的需求点集合
     demandPoints.value = res.demand_points ?? []
@@ -152,6 +222,7 @@ async function send(text?: string): Promise<void> {
       messages.value.push({
         role: "assistant",
         content: "核心需求已明确，确认完成？还是继续补充？",
+        created_at: new Date().toISOString(),
       })
       options.value = ["确认完成", "继续补充"]
     }
@@ -163,9 +234,9 @@ async function send(text?: string): Promise<void> {
 }
 
 function pick(opt: string): void {
-  // 原型明确化 §2："确认完成"触发完成；"继续补充"继续对话
+  // "确认完成"直接提交匹配（右侧按钮随时可提交）；"继续补充"继续对话
   if (opt === "确认完成") {
-    void finish()
+    void confirm()
     return
   }
   if (opt === "继续补充") {
@@ -175,25 +246,13 @@ function pick(opt: string): void {
   input.value = opt
 }
 
-async function finish(): Promise<void> {
-  if (!conversationId.value || version.value !== null) return
-  // 原型明确化 §2：产品类型未指定时不可完成（匹配锚点）
+async function confirm(): Promise<void> {
+  if (!conversationId.value) return
+  // 产品类型未明确时提示（匹配锚点）
   if (!hasProductType()) {
     message.warning("请先明确要寻找的产品类型")
     return
   }
-  try {
-    const res = await conversationFinish({ conversation_id: conversationId.value, message: "" })
-    version.value = res.version
-    demandPoints.value = res.demand_points ?? []
-    message.success(`需求档案已生成（版本 v${res.version}）`)
-  } catch {
-    message.error("生成需求档案失败")
-  }
-}
-
-async function confirm(): Promise<void> {
-  if (!conversationId.value || version.value === null) return
   try {
     const res = await conversationConfirm({
       conversation_id: conversationId.value,
@@ -276,6 +335,7 @@ onMounted(() => {
             <div v-if="loading" class="chat-page__empty">对话初始化中…</div>
             <div v-else class="chat-page__messages">
               <template v-for="(m, i) in messages">
+                <div v-if="showTimeDivider(i)" class="chat-page__time-divider">{{ formatDividerTime(m.created_at) }}</div>
                 <ChatBubble :role="m.role" :content="m.content" :error="m.error" />
                 <OptionButtonGroup
                   v-if="m.role === 'assistant' && !m.error && i === messages.length - 1"
@@ -285,22 +345,43 @@ onMounted(() => {
               </template>
             </div>
             <div class="chat-page__composer">
-              <NInput
-                v-model:value="input"
-                placeholder="描述您的代工需求，如：需要 5000 台机顶盒，Linux 系统，支持网口和 USB…"
-                :disabled="sending"
-                @keyup.enter="send()"
-              />
-              <NButton type="primary" :loading="sending" :disabled="!input.trim()" @click="send()">
-                发送
-              </NButton>
-              <NButton
-                :disabled="version !== null || !conversationId || !hasProductType()"
-                :title="!hasProductType() ? '请先明确要寻找的产品类型' : undefined"
-                @click="finish()"
-              >
-                {{ version !== null ? `已生成 v${version}` : "完成需求描述" }}
-              </NButton>
+              <div class="chat-page__input">
+                <div v-if="attachments.length" class="chat-page__attachments">
+                  <NTag
+                    v-for="a in attachments"
+                    :key="a.fileId"
+                    closable
+                    size="small"
+                    @close="removeAttachment(a.name)"
+                  >
+                    📎 {{ a.name }}
+                  </NTag>
+                </div>
+                <NInput
+                  v-model:value="input"
+                  type="textarea"
+                  :bordered="false"
+                  :autosize="{ minRows: 1, maxRows: 10 }"
+                  placeholder="描述您的代工需求，如：需要 5000 台机顶盒，Linux 系统，支持网口和 USB…（Shift+Enter 发送）"
+                  :disabled="sending"
+                  @keydown.enter="onEnter"
+                />
+                <div class="chat-page__input-actions">
+                  <NButton size="small" :loading="uploading" :disabled="sending" @click="chooseAttachment()">
+                    附件
+                  </NButton>
+                  <NButton
+                    type="primary"
+                    size="small"
+                    :loading="sending"
+                    :disabled="!input.trim()"
+                    @click="send()"
+                  >
+                    发送
+                  </NButton>
+                </div>
+              </div>
+              <input ref="fileInput" type="file" style="display: none" @change="onFileSelected" />
             </div>
           </div>
         </div>
@@ -316,32 +397,40 @@ onMounted(() => {
             <div v-show="!asideCollapsed" class="chat-page__aside-body">
               <DemandProfileCard :points="demandPoints" />
             </div>
-            <div v-if="version !== null && !asideCollapsed" class="chat-page__demand-footer">
+            <div v-if="hasProductType() && !asideCollapsed" class="chat-page__demand-footer">
               <NButton type="primary" block @click="confirm()">确认并提交匹配 →</NButton>
             </div>
           </div>
 
-          <!-- 匹配记录 card -->
-          <div class="chat-page__aside-card chat-page__records-card">
+          <!-- 匹配记录 card（可独立收起，方向与当前需求相反） -->
+          <div
+            class="chat-page__aside-card chat-page__records-card"
+            :class="{ 'is-collapsed': recordsCollapsed }"
+          >
             <div class="chat-page__aside-head">
               <h3>匹配记录</h3>
+              <NButton text size="small" @click="recordsCollapsed = !recordsCollapsed">
+                {{ recordsCollapsed ? "展开" : "收起" }}
+              </NButton>
             </div>
-            <div v-if="!records.length" class="chat-page__records-empty">
-              暂无匹配结果，完成需求并提交匹配后生成
-            </div>
-            <div v-else class="chat-page__records-list">
-              <div
-                v-for="r in records"
-                :key="r.request_id"
-                class="chat-page__record"
-                @click="openRecord(r.request_id)"
-              >
-                <div class="chat-page__record-top">
-                  <span class="chat-page__record-name">{{ recordTitle(r) }}</span>
-                  <span class="chat-page__record-version">v{{ r.version }}</span>
-                </div>
-                <div class="chat-page__record-meta">
-                  {{ r.match_count ?? 0 }} 家 · {{ r.created_at }}
+            <div v-show="!recordsCollapsed" class="chat-page__records-body">
+              <div v-if="!records.length" class="chat-page__records-empty">
+                暂无匹配结果，完成需求并提交匹配后生成
+              </div>
+              <div v-else class="chat-page__records-list">
+                <div
+                  v-for="r in records"
+                  :key="r.request_id"
+                  class="chat-page__record"
+                  @click="openRecord(r.request_id)"
+                >
+                  <div class="chat-page__record-top">
+                    <span class="chat-page__record-name">{{ recordTitle(r) }}</span>
+                    <span class="chat-page__record-version">v{{ r.version }}</span>
+                  </div>
+                  <div class="chat-page__record-meta">
+                    {{ r.match_count ?? 0 }} 家 · {{ r.created_at }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -459,6 +548,12 @@ onMounted(() => {
   overflow-y: auto;
   padding: var(--space-12);
 }
+.chat-page__time-divider {
+  text-align: center;
+  margin: var(--space-16) 0;
+  font-size: var(--font-size-11);
+  color: var(--color-text-secondary);
+}
 .chat-page__empty {
   padding: var(--space-24);
   color: var(--color-text-secondary);
@@ -467,10 +562,36 @@ onMounted(() => {
   display: flex;
   gap: var(--space-12);
   padding: var(--space-12);
-  border-top: var(--border-width-1) solid var(--color-border-subtle);
 }
-.chat-page__composer .n-input {
+.chat-page__input {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-12);
+  padding: var(--space-8);
+  background: var(--color-bg-panel);
+}
+.chat-page__input :deep(.n-input) {
+  width: 100%;
+}
+.chat-page__input :deep(.n-input__textarea-el) {
+  line-height: var(--line-height-normal);
+}
+.chat-page__input-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+.chat-page__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
 }
 .chat-page__aside {
   width: 320px;
@@ -520,6 +641,9 @@ onMounted(() => {
 .chat-page__demand-footer {
   flex: none;
   padding-top: var(--space-12);
+}
+.chat-page__records-card.is-collapsed {
+  flex: 0 0 auto;
 }
 .chat-page__records-empty {
   font-size: var(--font-size-13);

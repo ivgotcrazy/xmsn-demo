@@ -85,6 +85,7 @@ class ConversationMessageItem(BaseModel):
     content: str
     error: bool = False
     options: list[str] = Field(default_factory=list, description="仅末条助手消息可带候选选项")
+    created_at: datetime | None = None
 
 
 class ConversationMessagesResponse(BaseModel):
