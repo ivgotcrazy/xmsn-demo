@@ -70,7 +70,7 @@ async def generate(demand: dict, capability: dict, chunks: list[dict]) -> dict:
             capability_json=json.dumps(capability, ensure_ascii=False),
             chunks=_render_chunks(chunks),
         )
-        raw = await chat([{"role": "user", "content": prompt}], temperature=0.2, max_tokens=1200)
+        raw = await chat([{"role": "user", "content": prompt}], temperature=0.2, max_tokens=600)
         data = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group(0))
         params = []
         for p in data.get("params", []):

@@ -9,6 +9,7 @@ compute(request_id)：
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -200,20 +201,21 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
         a_source = "hybrid"
 
     caps = await _load_caps(db, [c["vendor_id"] for c in cands])
-    rows: list[dict] = []
-    for cand in cands:
+
+    # 通道B 并发（T7.3 性能：50 家候选串行 LLM 59s → 并发 8 控制在 SLO）
+    async def _process(cand: dict) -> dict | None:
         cap = caps.get(cand["vendor_id"])
         if not cap or not cap.structured_tags:
-            continue
+            return None
         tags = cap.structured_tags
         if _excluded_hard_filter(demand, tags):
-            continue  # 排除项硬过滤（4.5）
+            return None  # 排除项硬过滤（4.5）
         judgements, b_source = await judger.judge(demand, tags)
         source = "rule" if b_source == "rule" else a_source  # 通道B 降级优先标注
         sc = scorer.score(cand["semantic_score"], judgements)
         if sc["match_score"] < scorer.MIN_MATCH_SCORE:
-            continue  # 阈值 30 剔除
-        rows.append({
+            return None  # 阈值 30 剔除
+        return {
             "vendor_id": cand["vendor_id"],
             "match_score": sc["match_score"],
             "semantic_score": round(cand["semantic_score"], 4),
@@ -221,7 +223,16 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
             "critical_fail": sc["critical_fail"],
             "match_source": source,
             "judgements": judgements,
-        })
+        }
+
+    sem = asyncio.Semaphore(16)
+
+    async def _guarded(cand: dict) -> dict | None:
+        async with sem:
+            return await _process(cand)
+
+    results = await asyncio.gather(*(_guarded(c) for c in cands))
+    rows = [r for r in results if r]
 
     rows.sort(key=lambda r: -r["match_score"])
     computation_ms = int((time.perf_counter() - t0) * 1000)
