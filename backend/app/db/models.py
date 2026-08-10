@@ -37,7 +37,8 @@ class User(Base):
         CheckConstraint("role IN ('vendor','buyer','admin')", name="ck_users_role"),
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
-    phone: Mapped[str] = mapped_column(String(20), unique=True)
+    # 手机号/邮箱至少其一（支持纯邮箱注册）
+    phone: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20))
@@ -73,6 +74,13 @@ class VendorCapability(Base):
     vendor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vendors.vendor_id"))
     structured_tags: Mapped[dict] = mapped_column(JSONB, default=dict)
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 档案版本（每次重新解析增/删文档 +1）、基于文档数、完备度、字段级溯源+置信度
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    doc_count: Mapped[int] = mapped_column(Integer, default=0)
+    completeness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_map: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # 文档引用 [{file_id, name}]：增删文档触发重新解析（version+1）
+    doc_refs: Mapped[list] = mapped_column(JSONB, default=list)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     doc_urls: Mapped[list] = mapped_column(ARRAY(Text), default=list)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

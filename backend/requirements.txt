@@ -16,8 +16,12 @@ alembic==1.14.0
 langgraph==0.2.60
 openai==1.58.1
 
-# 向量数据库（Milvus）
-pymilvus==2.4.9
+# 向量数据库（Milvus）——2.5+ 提供 AsyncMilvusClient（2.4 仅有同步 MilvusClient）
+pymilvus==2.5.4
+# pymilvus 依赖 pkg_resources；setuptools>=81 已移除该包，故固定 <81
+setuptools==80.9.0
+# pymilvus 的 environs 依赖 marshmallow <4（4.x 移除 __version_info__）
+marshmallow==3.26.1
 
 # 文档解析（厂商解析 / 文件服务）
 pypdf==5.1.0
@@ -27,6 +31,8 @@ python-docx==1.1.2
 # 认证
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# bcrypt 固定 <4.1：passlib 1.7.4 与 bcrypt>=4.1 的 wrap-bug 检测不兼容（安装时勿升级）
+bcrypt==4.0.1
 
 # HTTP / 工具
 httpx==0.28.1

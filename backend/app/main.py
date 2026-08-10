@@ -61,6 +61,20 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
 
+    # ---- 异步任务队列（M2 起：厂商能力解析等）----
+    from app.core.queue import queue
+    from app.vector.client import ensure_collections
+    from app.worker import handle_task
+
+    @app.on_event("startup")
+    async def _start_worker() -> None:
+        await ensure_collections()
+        await queue.start(handle_task)
+
+    @app.on_event("shutdown")
+    async def _stop_worker() -> None:
+        await queue.stop()
+
     return app
 
 

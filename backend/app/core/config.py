@@ -1,11 +1,17 @@
 """全局配置（12-factor：配置外置，env/ConfigMap 读取）。对齐架构 11.4。"""
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# backend/.env（与启动目录无关，基于本文件位置定位）
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_ENV_FILE = _BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     # 应用
     app_name: str = "需脉枢纽 API"
@@ -38,6 +44,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
+    # 验证码：PoC 无短信/邮件网关时关闭（false=仅发送日志）；接入网关后开启
+    verify_code_required: bool = False
 
     # 业务常量
     llm_temperature: float = 0.2

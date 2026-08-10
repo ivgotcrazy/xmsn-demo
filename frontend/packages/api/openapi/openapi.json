@@ -413,7 +413,7 @@
         "tags": [
           "files"
         ],
-        "summary": "通用文件上传（≤10MB）",
+        "summary": "通用文件上传（≤20MB）",
         "operationId": "upload_api_v1_files_upload_post",
         "requestBody": {
           "content": {
