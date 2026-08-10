@@ -1,0 +1,99 @@
+{
+  "version": "v1",
+  "created": "2026-08-10",
+  "description": "需脉枢纽对话Agent 黄金集 v1（T3.8）：6 条真实风格对话，覆盖选项/自由文本/纠正/排除/多品类。",
+  "cases": [
+    {
+      "case_id": "C001",
+      "category": "机顶盒",
+      "dialog": [
+        {"role": "user", "content": "机顶盒"},
+        {"role": "user", "content": "Linux"},
+        {"role": "user", "content": "网口、USB"},
+        {"role": "user", "content": "CE、ISO9001"},
+        {"role": "user", "content": "5000 台"},
+        {"role": "user", "content": "20 天"}
+      ],
+      "gold_slots": {
+        "product_type": "机顶盒",
+        "os": ["Linux"],
+        "interfaces": ["网口", "USB"],
+        "certifications": ["CE", "ISO9001"],
+        "moq": 5000,
+        "lead_time_days": 20
+      },
+      "gold_vendor_id": null
+    },
+    {
+      "case_id": "C002",
+      "category": "机顶盒",
+      "dialog": [
+        {"role": "user", "content": "机顶盒"},
+        {"role": "user", "content": "要 Linux 和 CE 认证，接口用网口和 USB"}
+      ],
+      "gold_slots": {
+        "product_type": "机顶盒",
+        "os": ["Linux"],
+        "certifications": ["CE"],
+        "interfaces": ["网口", "USB"]
+      },
+      "gold_vendor_id": null
+    },
+    {
+      "case_id": "C003",
+      "category": "机顶盒",
+      "dialog": [
+        {"role": "user", "content": "机顶盒"},
+        {"role": "user", "content": "操作系统用 Linux"},
+        {"role": "user", "content": "不对，改成 Android"}
+      ],
+      "gold_slots": {
+        "product_type": "机顶盒",
+        "os": ["Android"]
+      },
+      "gold_vendor_id": null
+    },
+    {
+      "case_id": "C004",
+      "category": "机顶盒",
+      "dialog": [
+        {"role": "user", "content": "机顶盒"},
+        {"role": "user", "content": "不要 USB 接口"}
+      ],
+      "gold_slots": {
+        "product_type": "机顶盒"
+      },
+      "gold_vendor_id": null
+    },
+    {
+      "case_id": "C005",
+      "category": "智能音箱",
+      "dialog": [
+        {"role": "user", "content": "智能音箱"},
+        {"role": "user", "content": "Android"},
+        {"role": "user", "content": "蓝牙、WiFi"},
+        {"role": "user", "content": "需要远场语音识别"}
+      ],
+      "gold_slots": {
+        "product_type": "智能音箱",
+        "os": ["Android"],
+        "wireless": ["蓝牙", "WiFi"]
+      },
+      "gold_vendor_id": null
+    },
+    {
+      "case_id": "C006",
+      "category": "IoT设备",
+      "dialog": [
+        {"role": "user", "content": "IoT设备"},
+        {"role": "user", "content": "RTOS，LoRa 和 NB-IoT，3年质保"}
+      ],
+      "gold_slots": {
+        "product_type": "IoT设备",
+        "os": ["RTOS"],
+        "comm_protocol": ["LoRa", "NB-IoT"]
+      },
+      "gold_vendor_id": null
+    }
+  ]
+}

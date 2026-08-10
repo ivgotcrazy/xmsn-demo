@@ -1,7 +1,7 @@
 /* 生成物（只读勿手改）—— 由 scripts/generate.ts 从 openapi.json 契约快照生成 */
 /* API 客户端：统一经 http.request 封装（JWT 注入 + 统一响应 {code,message,data} 解包） */
 import { request } from "./http"
-import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, FinishResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, DeleteResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, BuyerListResponse, AdminLogListResponse, DocumentPreviewResponse } from "./types"
+import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, DeleteResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, BuyerListResponse, AdminLogListResponse, DocumentPreviewResponse } from "./types"
 
 export async function healthz(): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>("/healthz", { method: "GET" })
@@ -53,10 +53,6 @@ export async function conversationStart(body: ConversationStartRequest): Promise
 
 export async function conversationMessage(body: MessageRequest): Promise<MessageResponse> {
   return request<MessageResponse>("/api/v1/conversation/message", { method: "POST", body })
-}
-
-export async function conversationFinish(body: MessageRequest): Promise<FinishResponse> {
-  return request<FinishResponse>("/api/v1/conversation/finish", { method: "POST", body })
 }
 
 export async function conversationConfirm(body: ConfirmRequest): Promise<ConfirmResponse> {

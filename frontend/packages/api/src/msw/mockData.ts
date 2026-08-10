@@ -336,13 +336,9 @@ export const mockData: Record<string, MockResolver | unknown> = {
         demand_points: DEMAND_POINTS_STB,
         title: "机顶盒",
       })),
-  "POST /api/v1/conversation/finish": () => ({
-    version: 1,
-    demand_points: DEMAND_POINTS_STB,
-  }),
   "POST /api/v1/conversation/confirm": () => ({
     request_id: "req-002",
-    version: 2,
+    version: 1,
     redirect_to: "",
   }),
   "GET /api/v1/conversations": () => {

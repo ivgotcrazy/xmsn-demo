@@ -1,0 +1,144 @@
+{
+  "total_cases": 6,
+  "avg_slot_f1": 0.9583,
+  "avg_completeness": 1.0,
+  "latency_cost": {
+    "llm_calls": 6,
+    "avg_llm_s": 3.34,
+    "total_s": 20.037
+  },
+  "stability": {
+    "n": 6,
+    "slot_consistency": 1.0,
+    "score_std": null,
+    "top5_jaccard": 1.0,
+    "rank_shift": null
+  },
+  "reports": [
+    {
+      "case_id": "C001",
+      "category": "机顶盒",
+      "slot_f1": 1.0,
+      "completeness": 1.0,
+      "guidance": {
+        "turns": 6,
+        "free_text_turns": 0
+      },
+      "e2e_top1": null,
+      "pred_slots": {
+        "product_type": "机顶盒",
+        "os": [
+          "Linux"
+        ],
+        "interfaces": [
+          "网口",
+          "USB"
+        ],
+        "certifications": [
+          "CE",
+          "ISO9001"
+        ],
+        "moq": 5000,
+        "lead_time_days": 20
+      }
+    },
+    {
+      "case_id": "C002",
+      "category": "机顶盒",
+      "slot_f1": 1.0,
+      "completeness": 1.0,
+      "guidance": {
+        "turns": 2,
+        "free_text_turns": 0
+      },
+      "e2e_top1": null,
+      "pred_slots": {
+        "product_type": "机顶盒",
+        "os": [
+          "Linux"
+        ],
+        "certifications": [
+          "CE"
+        ],
+        "interfaces": [
+          "网口",
+          "USB"
+        ]
+      }
+    },
+    {
+      "case_id": "C003",
+      "category": "机顶盒",
+      "slot_f1": 1.0,
+      "completeness": 1.0,
+      "guidance": {
+        "turns": 3,
+        "free_text_turns": 0
+      },
+      "e2e_top1": null,
+      "pred_slots": {
+        "product_type": "机顶盒",
+        "os": [
+          "Android"
+        ]
+      }
+    },
+    {
+      "case_id": "C004",
+      "category": "机顶盒",
+      "slot_f1": 1.0,
+      "completeness": 1.0,
+      "guidance": {
+        "turns": 2,
+        "free_text_turns": 0
+      },
+      "e2e_top1": null,
+      "pred_slots": {
+        "product_type": "机顶盒"
+      }
+    },
+    {
+      "case_id": "C005",
+      "category": "智能音箱",
+      "slot_f1": 0.75,
+      "completeness": 1.0,
+      "guidance": {
+        "turns": 4,
+        "free_text_turns": 0
+      },
+      "e2e_top1": null,
+      "pred_slots": {
+        "product_type": "智能音箱",
+        "os": [
+          "Android"
+        ],
+        "wireless": [
+          "蓝牙",
+          "WiFi"
+        ],
+        "mic_array": "4麦"
+      }
+    },
+    {
+      "case_id": "C006",
+      "category": "IoT设备",
+      "slot_f1": 1.0,
+      "completeness": 1.0,
+      "guidance": {
+        "turns": 2,
+        "free_text_turns": 0
+      },
+      "e2e_top1": null,
+      "pred_slots": {
+        "product_type": "IoT设备",
+        "os": [
+          "RTOS"
+        ],
+        "comm_protocol": [
+          "LoRa",
+          "NB-IoT"
+        ]
+      }
+    }
+  ]
+}

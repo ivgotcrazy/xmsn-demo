@@ -56,10 +56,6 @@ export const handlers = [
     const data = await resolveMock("POST /api/v1/conversation/message", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
-  http.post("*/api/v1/conversation/finish", async ({ request }) => {
-    const data = await resolveMock("POST /api/v1/conversation/finish", request)
-    return HttpResponse.json({ code: 0, message: "ok", data })
-  }),
   http.post("*/api/v1/conversation/confirm", async ({ request }) => {
     const data = await resolveMock("POST /api/v1/conversation/confirm", request)
     return HttpResponse.json({ code: 0, message: "ok", data })

@@ -49,13 +49,6 @@ class MessageResponse(BaseModel):
     title: str = "新会话"
 
 
-class FinishResponse(BaseModel):
-    """完成需求描述 → 生成需求档案（版本 vN，含完整需求点集合）。"""
-
-    version: int
-    demand_points: list[DemandPoint] = Field(default_factory=list)
-
-
 class ConfirmRequest(BaseModel):
     conversation_id: str
     demand_points: list[DemandPoint] = Field(default_factory=list)

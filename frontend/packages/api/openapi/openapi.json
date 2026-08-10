@@ -500,7 +500,7 @@
         "tags": [
           "conversation"
         ],
-        "summary": "发送消息（SSE 流式）",
+        "summary": "发送消息",
         "operationId": "message_api_v1_conversation_message_post",
         "requestBody": {
           "content": {
@@ -541,58 +541,12 @@
         ]
       }
     },
-    "/api/v1/conversation/finish": {
-      "post": {
-        "tags": [
-          "conversation"
-        ],
-        "summary": "完成需求描述 → 生成需求档案",
-        "operationId": "finish_api_v1_conversation_finish_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MessageRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_FinishResponse_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/conversation/confirm": {
       "post": {
         "tags": [
           "conversation"
         ],
-        "summary": "确认需求档案并提交匹配",
+        "summary": "确认需求档案并提交匹配（单端点）",
         "operationId": "confirm_api_v1_conversation_confirm_post",
         "requestBody": {
           "content": {
@@ -1948,32 +1902,6 @@
         "type": "object",
         "title": "ApiResponse[DocumentPreviewResponse]"
       },
-      "ApiResponse_FinishResponse_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "ok"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FinishResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "ApiResponse[FinishResponse]"
-      },
       "ApiResponse_MatchComputeResponse_": {
         "properties": {
           "code": {
@@ -2919,27 +2847,6 @@
           "content"
         ],
         "title": "DocumentPreviewResponse"
-      },
-      "FinishResponse": {
-        "properties": {
-          "version": {
-            "type": "integer",
-            "title": "Version"
-          },
-          "demand_points": {
-            "items": {
-              "$ref": "#/components/schemas/DemandPoint"
-            },
-            "type": "array",
-            "title": "Demand Points"
-          }
-        },
-        "type": "object",
-        "required": [
-          "version"
-        ],
-        "title": "FinishResponse",
-        "description": "完成需求描述 → 生成需求档案（版本 vN，含完整需求点集合）。"
       },
       "HTTPValidationError": {
         "properties": {

@@ -102,11 +102,6 @@ export type ApiResponse_DocumentPreviewResponse_ = {
   message?: string;
   data?: (DocumentPreviewResponse | null);
 };
-export type ApiResponse_FinishResponse_ = {
-  code?: number;
-  message?: string;
-  data?: (FinishResponse | null);
-};
 export type ApiResponse_MatchComputeResponse_ = {
   code?: number;
   message?: string;
@@ -272,10 +267,6 @@ export type DocumentPreviewResponse = {
   page: number;
   content: string;
   highlight?: (string | null);
-};
-export type FinishResponse = {
-  version: number;
-  demand_points?: DemandPoint[];
 };
 export type HTTPValidationError = {
   detail?: ValidationError[];
