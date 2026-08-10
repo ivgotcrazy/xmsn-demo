@@ -121,6 +121,13 @@ function formatDividerTime(iso?: string): string {
 function pad2(n: number): string {
   return String(n).padStart(2, "0")
 }
+/** 会话卡更新时间：MM-DD HH:mm（本 demo 会话均为历史日期，不做相对时间）。 */
+function formatSessionTime(iso?: string): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
 
 async function init(): Promise<void> {
   loading.value = true
@@ -180,6 +187,7 @@ async function newSession(): Promise<void> {
     activeId.value = res.conversation_id
     sessions.value.unshift({
       conversation_id: res.conversation_id,
+      title: res.title ?? "新会话",
       status: "active",
       updated_at: new Date().toISOString(),
       last_request_id: null,
@@ -216,6 +224,11 @@ async function send(text?: string): Promise<void> {
     options.value = res.assistant_message.options ?? []
     // 前端「当前需求」：全量替换为萃取出的需求点集合
     demandPoints.value = res.demand_points ?? []
+    // 一会话一产品：萃取到产品类型后，会话卡标题联动更新（新会话「新会话」→ 产品名）
+    if (res.title) {
+      const cur = sessions.value.find((s) => s.conversation_id === conversationId.value)
+      if (cur) cur.title = res.title
+    }
     // 原型明确化 §2：核心参数（产品类型等）齐备后 Agent 主动提示确认完成
     if (hasProductType() && !confirmPrompted.value) {
       confirmPrompted.value = true
@@ -315,13 +328,13 @@ onMounted(() => {
           @click="openConversation(s.conversation_id)"
         >
           <div class="chat-page__rail-top">
-            <span class="chat-page__rail-id">{{ s.conversation_id }}</span>
+            <span class="chat-page__rail-id">{{ s.title || s.conversation_id }}</span>
             <NTag size="small" :type="statusType(s.status)" :bordered="false">
               {{ statusLabel(s.status) }}
             </NTag>
           </div>
           <div class="chat-page__rail-meta">
-            请求 {{ s.request_count ?? 0 }} 次 · {{ s.updated_at }}
+            请求 {{ s.request_count ?? 0 }} 次 · {{ formatSessionTime(s.updated_at) }}
           </div>
         </div>
         <div v-if="!sessions.length" class="chat-page__rail-empty">暂无会话</div>
@@ -450,7 +463,7 @@ onMounted(() => {
 }
 /* 左侧：常驻会话列表 */
 .chat-page__rail {
-  width: 240px;
+  width: 300px;
   flex: none;
   display: flex;
   flex-direction: column;

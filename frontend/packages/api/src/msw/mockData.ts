@@ -65,6 +65,41 @@ const DEMAND_POINTS_SPEAKER = [
   { key: "appearance", label: "外壳颜色", value: "白色", confidence: 0.9 },
 ]
 
+/** 一会话一产品：产品类型萃取映射（会话标题=产品类型名；含首次萃取回复与需求点集合）。 */
+const PRODUCT_PROFILES: Record<
+  string,
+  { title: string; reply: string; options: string[]; points: typeof DEMAND_POINTS_STB }
+> = {
+  机顶盒: {
+    title: "机顶盒",
+    reply: "好的，机顶盒代工，需要Linux系统。请问您需要哪些接口？",
+    options: ["网口", "USB", "HDMI", "GPIO"],
+    points: DEMAND_POINTS_STB,
+  },
+  智能音箱: {
+    title: "智能音箱",
+    reply: "好的，智能音箱代工，需要什么操作系统？",
+    options: ["Linux", "Android", "RTOS"],
+    points: DEMAND_POINTS_SPEAKER,
+  },
+}
+const PRODUCT_KEYWORDS: Record<string, string[]> = {
+  机顶盒: ["机顶盒", "机顶", "STB", "电视盒", "盒子"],
+  智能音箱: ["智能音箱", "音箱", "音响", "speaker"],
+}
+/** 会话锁定产品：conv-001 已确认机顶盒；conv-002 进行中智能音箱；新建会话无锁定。 */
+const SESSION_LOCKED: Record<string, string> = {
+  "conv-001": "机顶盒",
+  "conv-002": "智能音箱",
+}
+/** 从用户消息中检测提到的产品类型（返回标题；未命中返回 undefined）。 */
+function detectProduct(message: string): string | undefined {
+  for (const [title, kws] of Object.entries(PRODUCT_KEYWORDS)) {
+    if (kws.some((k) => message.includes(k))) return title
+  }
+  return undefined
+}
+
 export const mockData: Record<string, MockResolver | unknown> = {
   // ---- auth ----
   "POST /api/v1/auth/login": (request: Request) =>
@@ -195,15 +230,69 @@ export const mockData: Record<string, MockResolver | unknown> = {
       options: ["机顶盒", "智能音箱", "IoT设备", "其他"],
     },
     demand_points: [],
+    title: "新会话",
   }),
-  "POST /api/v1/conversation/message": () => ({
-    assistant_message: {
-      role: "assistant",
-      content: "好的，机顶盒代工，需要Linux系统。请问您需要哪些接口？",
-      options: ["网口", "USB", "HDMI", "GPIO"],
-    },
-    demand_points: DEMAND_POINTS_STB,
-  }),
+  "POST /api/v1/conversation/message": (request: Request) =>
+    request
+      .json()
+      .then((body: { conversation_id?: string; message?: string }) => {
+        const conversationId = body.conversation_id ?? "conv-003"
+        const text = body.message ?? ""
+        const locked = SESSION_LOCKED[conversationId]
+        const detected = detectProduct(text)
+        // 守卫：会话已锁定产品 A，用户提到产品 B → 不切换，引导新建会话
+        if (locked && detected && detected !== locked) {
+          return {
+            assistant_message: {
+              role: "assistant",
+              content: `检测到您提到「${detected}」，当前会话已聚焦「${locked}」。如需咨询 ${detected}，建议新建会话。`,
+              options: [],
+            },
+            demand_points: PRODUCT_PROFILES[locked].points,
+            title: locked,
+          }
+        }
+        // 萃取：检测到产品（新会话首次锁定）
+        if (detected) {
+          const p = PRODUCT_PROFILES[detected]
+          return {
+            assistant_message: { role: "assistant", content: p.reply, options: p.options },
+            demand_points: p.points,
+            title: p.title,
+          }
+        }
+        // 已锁定会话：补充其他需求（通用确认，不改变产品聚焦）
+        if (locked) {
+          return {
+            assistant_message: {
+              role: "assistant",
+              content: "已记录，还有其他需求需要补充吗？",
+              options: [],
+            },
+            demand_points: PRODUCT_PROFILES[locked].points,
+            title: locked,
+          }
+        }
+        // 新会话未检测到产品：通用追问
+        return {
+          assistant_message: {
+            role: "assistant",
+            content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？",
+            options: ["机顶盒", "智能音箱", "IoT设备", "其他"],
+          },
+          demand_points: [],
+          title: "新会话",
+        }
+      })
+      .catch(() => ({
+        assistant_message: {
+          role: "assistant",
+          content: "好的，机顶盒代工，需要Linux系统。请问您需要哪些接口？",
+          options: ["网口", "USB", "HDMI", "GPIO"],
+        },
+        demand_points: DEMAND_POINTS_STB,
+        title: "机顶盒",
+      })),
   "POST /api/v1/conversation/finish": () => ({
     version: 1,
     demand_points: DEMAND_POINTS_STB,
@@ -217,6 +306,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
     conversations: [
       {
         conversation_id: "conv-001",
+        title: "机顶盒",
         status: "confirmed",
         updated_at: "2026-08-05T09:30:00Z",
         last_request_id: "req-001",
@@ -224,6 +314,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
       },
       {
         conversation_id: "conv-002",
+        title: "智能音箱",
         status: "active",
         updated_at: "2026-08-06T10:00:00Z",
         last_request_id: null,
@@ -271,6 +362,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
     if (id === "conv-001") {
       return {
         conversation_id: "conv-001",
+        title: "机顶盒",
         status: "confirmed",
         messages: [
           { role: "assistant", content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？", options: ["机顶盒", "智能音箱", "IoT设备", "其他"], created_at: "2026-08-05T09:00:00Z" },
@@ -292,6 +384,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
     if (id === "conv-002") {
       return {
         conversation_id: "conv-002",
+        title: "智能音箱",
         status: "active",
         messages: [
           { role: "assistant", content: "您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？", options: ["机顶盒", "智能音箱", "IoT设备", "其他"], created_at: "2026-08-06T10:00:00Z" },
@@ -308,6 +401,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
     // 其他（如新建会话 conv-003）：空现场
     return {
       conversation_id: id,
+      title: "新会话",
       status: "active",
       messages: [],
       demand_points: [],

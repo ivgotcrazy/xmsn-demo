@@ -1967,6 +1967,11 @@
             "type": "string",
             "title": "Conversation Id"
           },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "新会话"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -2081,6 +2086,11 @@
             "type": "string",
             "title": "Conversation Id"
           },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "新会话"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -2128,7 +2138,7 @@
           "messages"
         ],
         "title": "ConversationMessagesResponse",
-        "description": "会话完整现场：消息气泡 + 完整需求点集合 + 档案版本（02A 点击会话切换恢复）。"
+        "description": "会话完整现场：消息气泡 + 完整需求点集合 + 档案版本（02A 点击会话切换恢复）。\ntitle 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。"
       },
       "ConversationStartRequest": {
         "properties": {
@@ -2158,6 +2168,11 @@
             },
             "type": "array",
             "title": "Demand Points"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "新会话"
           }
         },
         "type": "object",
@@ -2636,6 +2651,11 @@
             },
             "type": "array",
             "title": "Demand Points"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "新会话"
           }
         },
         "type": "object",
@@ -2643,7 +2663,7 @@
           "assistant_message"
         ],
         "title": "MessageResponse",
-        "description": "SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。\ndemand_points 为当前完整需求点集合（全量返回，前端整体替换）。"
+        "description": "SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。\ndemand_points 为当前完整需求点集合（全量返回，前端整体替换）。\ntitle 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。"
       },
       "RegisterRequest": {
         "properties": {

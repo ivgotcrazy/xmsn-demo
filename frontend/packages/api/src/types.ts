@@ -169,6 +169,7 @@ export type ConfirmResponse = {
 };
 export type ConversationListItem = {
   conversation_id: string;
+  title?: string;
   status: "active" | "confirmed" | "closed";
   updated_at: string;
   last_request_id?: (string | null);
@@ -187,6 +188,7 @@ export type ConversationMessageItem = {
 };
 export type ConversationMessagesResponse = {
   conversation_id: string;
+  title?: string;
   status: "active" | "confirmed" | "closed";
   messages: ConversationMessageItem[];
   demand_points?: DemandPoint[];
@@ -200,6 +202,7 @@ export type ConversationStartResponse = {
   conversation_id: string;
   first_message: AssistantMessage;
   demand_points?: DemandPoint[];
+  title?: string;
 };
 export type DemandPoint = {
   key: string;
@@ -277,6 +280,7 @@ export type MessageRequest = {
 export type MessageResponse = {
   assistant_message: AssistantMessage;
   demand_points?: DemandPoint[];
+  title?: string;
 };
 export type RegisterRequest = {
   phone?: (string | null);

@@ -91,6 +91,8 @@ class Conversation(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id"))
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # 会话标题（一会话一产品）：聚焦的产品类型名，未确定时为「新会话」
+    title: Mapped[str] = mapped_column(String(100), default="新会话")
     conversation_history: Mapped[list] = mapped_column(JSONB, default=list)
     current_slots: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

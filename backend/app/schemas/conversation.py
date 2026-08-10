@@ -31,6 +31,7 @@ class ConversationStartResponse(BaseModel):
     conversation_id: str
     first_message: AssistantMessage
     demand_points: list[DemandPoint] = Field(default_factory=list)
+    title: str = "新会话"
 
 
 class MessageRequest(BaseModel):
@@ -40,10 +41,12 @@ class MessageRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     """SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。
-    demand_points 为当前完整需求点集合（全量返回，前端整体替换）。"""
+    demand_points 为当前完整需求点集合（全量返回，前端整体替换）。
+    title 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。"""
 
     assistant_message: AssistantMessage
     demand_points: list[DemandPoint] = Field(default_factory=list)
+    title: str = "新会话"
 
 
 class FinishResponse(BaseModel):
@@ -67,6 +70,7 @@ class ConfirmResponse(BaseModel):
 # ---- 历史（产品 2.8）----
 class ConversationListItem(BaseModel):
     conversation_id: str
+    title: str = "新会话"
     status: Literal["active", "confirmed", "closed"]
     updated_at: datetime
     last_request_id: str | None = None
@@ -89,9 +93,11 @@ class ConversationMessageItem(BaseModel):
 
 
 class ConversationMessagesResponse(BaseModel):
-    """会话完整现场：消息气泡 + 完整需求点集合 + 档案版本（02A 点击会话切换恢复）。"""
+    """会话完整现场：消息气泡 + 完整需求点集合 + 档案版本（02A 点击会话切换恢复）。
+    title 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。"""
 
     conversation_id: str
+    title: str = "新会话"
     status: Literal["active", "confirmed", "closed"]
     messages: list[ConversationMessageItem]
     demand_points: list[DemandPoint] = Field(default_factory=list)
