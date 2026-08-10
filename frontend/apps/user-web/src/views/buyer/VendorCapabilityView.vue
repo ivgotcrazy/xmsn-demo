@@ -164,6 +164,11 @@ onMounted(async () => {
   padding: var(--space-32);
   color: var(--color-text-secondary);
 }
+.vendor-page__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
 .vendor-block {
   background: var(--color-bg-panel);
   border: var(--border-width-1) solid var(--color-border-subtle);
