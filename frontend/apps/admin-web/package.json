@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vicons/ionicons5": "^0.13.0",
     "@xmsn/api": "workspace:*",
     "@xmsn/tokens": "workspace:*",
     "@xmsn/types": "workspace:*",

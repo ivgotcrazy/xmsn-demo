@@ -676,6 +676,109 @@
         }
       }
     },
+    "/api/v1/conversation/{conversation_id}": {
+      "delete": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "逻辑删除会话（deleted_at 标记，数据保留）",
+        "operationId": "delete_conversation_api_v1_conversation__conversation_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DeleteResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversation/{conversation_id}/requests/{request_id}": {
+      "delete": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "逻辑删除需求档案/匹配（deleted_at 标记，数据保留）",
+        "operationId": "delete_request_api_v1_conversation__conversation_id__requests__request_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DeleteResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/conversations": {
       "get": {
         "tags": [
@@ -1018,6 +1121,182 @@
         }
       }
     },
+    "/api/v1/admin/buyers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "买家列表（搜索/状态筛选，分页）",
+        "operationId": "list_buyers_api_v1_admin_buyers_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "手机号/邮箱关键词",
+              "title": "Keyword"
+            },
+            "description": "手机号/邮箱关键词"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "active/disabled",
+              "title": "Status"
+            },
+            "description": "active/disabled"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BuyerListResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "事件日志（审计，按动作筛选，分页）",
+        "operationId": "list_logs_api_v1_admin_logs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "动作类型",
+              "title": "Action"
+            },
+            "description": "动作类型"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AdminLogListResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/documents/{doc_id}/preview": {
       "get": {
         "tags": [
@@ -1079,6 +1358,98 @@
   },
   "components": {
     "schemas": {
+      "AdminLogItem": {
+        "properties": {
+          "log_id": {
+            "type": "string",
+            "title": "Log Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "action_label": {
+            "type": "string",
+            "title": "Action Label",
+            "default": ""
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "admin_name": {
+            "type": "string",
+            "title": "Admin Name",
+            "default": ""
+          },
+          "detail": {
+            "type": "object",
+            "title": "Detail"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "log_id",
+          "action",
+          "created_at"
+        ],
+        "title": "AdminLogItem",
+        "description": "事件日志项（admin_logs 审计：管理员操作/登录/导出等，append-only）。"
+      },
+      "AdminLogListResponse": {
+        "properties": {
+          "list": {
+            "items": {
+              "$ref": "#/components/schemas/AdminLogItem"
+            },
+            "type": "array",
+            "title": "List"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "list",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AdminLogListResponse"
+      },
       "AdminRequestItem": {
         "properties": {
           "request_id": {
@@ -1097,15 +1468,25 @@
             "type": "object",
             "title": "Structured Demand"
           },
+          "buyer_phone": {
+            "type": "string",
+            "title": "Buyer Phone",
+            "default": ""
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At"
-          },
-          "match_count": {
-            "type": "integer",
-            "title": "Match Count",
-            "default": 0
           }
         },
         "type": "object",
@@ -1115,7 +1496,8 @@
           "version",
           "created_at"
         ],
-        "title": "AdminRequestItem"
+        "title": "AdminRequestItem",
+        "description": "需求匹配列表项（行=需求档案=一次匹配；run 内嵌匹配实体，含物化统计）。"
       },
       "AdminRequestListResponse": {
         "properties": {
@@ -1176,6 +1558,32 @@
         ],
         "title": "AdminStatsResponse",
         "description": "数据概览（产品 3.1 AC1 四个统计卡片）。"
+      },
+      "ApiResponse_AdminLogListResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminLogListResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[AdminLogListResponse]"
       },
       "ApiResponse_AdminRequestListResponse_": {
         "properties": {
@@ -1280,6 +1688,32 @@
         },
         "type": "object",
         "title": "ApiResponse[AuthToken]"
+      },
+      "ApiResponse_BuyerListResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BuyerListResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[BuyerListResponse]"
       },
       "ApiResponse_CapabilityOut_": {
         "properties": {
@@ -1410,6 +1844,32 @@
         },
         "type": "object",
         "title": "ApiResponse[ConversationStartResponse]"
+      },
+      "ApiResponse_DeleteResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeleteResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[DeleteResponse]"
       },
       "ApiResponse_DocumentPreviewResponse_": {
         "properties": {
@@ -1854,6 +2314,104 @@
         ],
         "title": "Body_upload_capability_api_v1_vendor_capability_upload_post"
       },
+      "BuyerItem": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "conversation_count": {
+            "type": "integer",
+            "title": "Conversation Count",
+            "default": 0
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count",
+            "default": 0
+          },
+          "last_active_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "phone",
+          "created_at"
+        ],
+        "title": "BuyerItem",
+        "description": "买家列表项（users 表 role='buyer' + 关联统计，一次性返回避免逐行联查）。"
+      },
+      "BuyerListResponse": {
+        "properties": {
+          "list": {
+            "items": {
+              "$ref": "#/components/schemas/BuyerItem"
+            },
+            "type": "array",
+            "title": "List"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "list",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "BuyerListResponse"
+      },
       "CapabilityOut": {
         "properties": {
           "capability_id": {
@@ -2182,6 +2740,31 @@
         ],
         "title": "ConversationStartResponse"
       },
+      "DeleteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted",
+            "default": true
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deleted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "deleted_at"
+        ],
+        "title": "DeleteResponse",
+        "description": "逻辑删除结果：数据保留（deleted_at 标记），仅从可见列表移除（所有数据有挖掘价值）。"
+      },
       "DemandPoint": {
         "properties": {
           "key": {
@@ -2345,6 +2928,9 @@
       },
       "MatchComputeResponse": {
         "properties": {
+          "run": {
+            "$ref": "#/components/schemas/MatchRun"
+          },
           "match_results": {
             "items": {
               "$ref": "#/components/schemas/MatchItem"
@@ -2352,30 +2938,21 @@
             "type": "array",
             "title": "Match Results"
           },
-          "total_matches": {
-            "type": "integer",
-            "title": "Total Matches"
-          },
-          "computation_time_ms": {
-            "type": "integer",
-            "title": "Computation Time Ms"
-          },
           "demand_points": {
             "items": {
               "$ref": "#/components/schemas/DemandPoint"
             },
             "type": "array",
             "title": "Demand Points",
-            "description": "本次匹配对应的需求档案（需求点集合；一个档案对应多个匹配结果）"
+            "description": "本次匹配对应的需求档案（需求点集合；一个档案对应一个匹配实体）"
           }
         },
         "type": "object",
         "required": [
-          "match_results",
-          "total_matches",
-          "computation_time_ms"
+          "run"
         ],
-        "title": "MatchComputeResponse"
+        "title": "MatchComputeResponse",
+        "description": "一次匹配的整体结果：run（匹配实体，含物化统计）+ 厂商匹配结果列表（可为空）。"
       },
       "MatchDetailResponse": {
         "properties": {
@@ -2621,6 +3198,62 @@
         ],
         "title": "MatchParam",
         "description": "单条参数判定（仅对买家已指定参数判定；出处引用指向厂商原始文档）。\n\npartial 语义为“需协商·厂商未声明”：买家已指定但厂商能力档案未声明/部分覆盖。"
+      },
+      "MatchRun": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "done",
+              "empty"
+            ],
+            "title": "Status",
+            "default": "done"
+          },
+          "total_vendors": {
+            "type": "integer",
+            "title": "Total Vendors",
+            "default": 0
+          },
+          "best_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Score"
+          },
+          "computation_time_ms": {
+            "type": "integer",
+            "title": "Computation Time Ms",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "request_id",
+          "created_at"
+        ],
+        "title": "MatchRun",
+        "description": "匹配实体 = 一次匹配行为（1:1 锚定一个需求档案）。物化统计字段，查询免实时计算。\n\nstatus: running=计算中 / done=有厂商命中 / empty=本次匹配发生但无厂商命中。"
       },
       "MessageRequest": {
         "properties": {

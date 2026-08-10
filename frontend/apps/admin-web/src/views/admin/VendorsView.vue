@@ -10,6 +10,7 @@ import {
   NInput,
   NModal,
   NPopconfirm,
+  NSelect,
   NSpin,
   NTabPane,
   NTabs,
@@ -36,6 +37,7 @@ const message = useMessage()
 const loading = ref(true)
 const rows = ref<VendorAuditItem[]>([])
 const keyword = ref("")
+const auditStatus = ref<string | null>(null)
 
 const drawerOpen = ref(false)
 const currentVendor = ref<VendorAuditItem | null>(null)
@@ -58,9 +60,15 @@ async function openDocPreview(name: string): Promise<void> {
 }
 
 const filtered = computed(() => {
-  if (!keyword.value) return rows.value
-  const k = keyword.value.trim().toLowerCase()
-  return rows.value.filter((r) => r.company_name.toLowerCase().includes(k))
+  let list = rows.value
+  if (keyword.value.trim()) {
+    const k = keyword.value.trim().toLowerCase()
+    list = list.filter((r) => r.company_name.toLowerCase().includes(k))
+  }
+  if (auditStatus.value) {
+    list = list.filter((r) => r.audit_status === auditStatus.value)
+  }
+  return list
 })
 
 const TAG_LABEL: Record<string, string> = {
@@ -77,10 +85,19 @@ function display(v: unknown): string {
   return Array.isArray(v) ? v.join("、") : String(v ?? "")
 }
 
+/** 时间格式化：MM-DD HH:mm（Demo 均为历史日期）。 */
+function formatTime(iso?: string): string {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const pad = (n: number): string => String(n).padStart(2, "0")
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 async function load(): Promise<void> {
   loading.value = true
   try {
-    const res = await adminVendors(undefined, 1, 100)
+    const res = await adminVendors(auditStatus.value, 1, 100)
     rows.value = res.list ?? []
   } finally {
     loading.value = false
@@ -121,8 +138,15 @@ async function audit(row: VendorAuditItem, action: "pass" | "reject"): Promise<v
 }
 
 const columns: DataTableColumns<VendorAuditItem> = [
-  { title: "厂商ID", key: "vendor_id", width: 190 },
-  { title: "企业名称", key: "company_name" },
+  {
+    title: "企业名称",
+    key: "company_name",
+    render: (row) =>
+      h("div", { class: "vendors-page__company" }, [
+        h("span", { class: "vendors-page__company-mark" }, row.company_name.slice(0, 1)),
+        h("span", row.company_name),
+      ]),
+  },
   { title: "所在地", key: "location" },
   { title: "主营行业", key: "main_industry" },
   {
@@ -134,7 +158,7 @@ const columns: DataTableColumns<VendorAuditItem> = [
       return h(NTag, { size: "small", type: meta.tagType, bordered: false }, { default: () => meta.label })
     },
   },
-  { title: "提交时间", key: "created_at", width: 180 },
+  { title: "提交时间", key: "created_at", width: 140, render: (row) => formatTime(row.created_at) },
   {
     title: "操作",
     key: "actions",
@@ -171,26 +195,46 @@ onMounted(() => {
 
 <template>
   <div class="vendors-page">
-    <div class="vendors-page__crumb">管理员后台 / 厂商产品</div>
-    <div class="vendors-page__bar">
-      <NInput v-model:value="keyword" placeholder="搜索企业名称" clearable style="width: 240px" />
+    <div class="vendors-page__filters">
+      <NInput v-model:value="keyword" placeholder="搜索企业名称" clearable style="width: 240px" @keyup.enter="load()" />
+      <NSelect
+        v-model:value="auditStatus"
+        :options="[
+          { label: '审核中', value: 'pending' },
+          { label: '已通过', value: 'passed' },
+          { label: '已驳回', value: 'rejected' },
+        ]"
+        placeholder="审核状态"
+        clearable
+        style="width: 140px"
+      />
+      <NButton @click="load()">查询</NButton>
     </div>
-    <NDataTable
-      :columns="columns"
-      :data="filtered"
-      :loading="loading"
-      :bordered="false"
-      :row-key="(r) => r.vendor_id"
-    />
+    <div class="vendors-page__table-card">
+      <NDataTable
+        :columns="columns"
+        :data="filtered"
+        :loading="loading"
+        :bordered="false"
+        striped
+        :row-key="(r) => r.vendor_id"
+        :pagination="{
+          pageSize: 10,
+          showSizePicker: true,
+          pageSizes: [10, 20],
+        }"
+      />
+    </div>
 
     <NDrawer
       v-model:show="drawerOpen"
       placement="right"
       width="640px"
+      :content-style="{ padding: '16px 24px 24px' }"
       :title="`厂商详情 ${currentVendor?.company_name ?? ''}`"
     >
       <NSpin :show="detailLoading">
-        <NTabs v-if="vendorDetail || capDetail" type="line">
+        <NTabs v-if="vendorDetail || capDetail" type="line" class="vendors-page__tabs">
           <NTabPane name="basic" tab="基本信息">
             <div v-if="vendorDetail" class="vendors-page__kv">
               <div><span>企业名称</span><b>{{ vendorDetail.company_name }}</b></div>
@@ -213,9 +257,9 @@ onMounted(() => {
           </NTabPane>
           <NTabPane name="raw" tab="原始资料">
             <div v-if="capDetail">
-              <h4>文本片段</h4>
+              <h4 class="vendors-page__sub">文本片段</h4>
               <p class="vendors-page__raw">{{ capDetail.raw_text ?? "—" }}</p>
-              <h4>文档（点击预览）</h4>
+              <h4 class="vendors-page__sub">文档（点击预览）</h4>
               <ul v-if="capDetail.doc_urls?.length" class="vendors-page__docs">
                 <li
                   v-for="d in capDetail.doc_urls"
@@ -245,23 +289,51 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.vendors-page__crumb {
+.vendors-page__filters {
+  display: flex;
+  gap: var(--space-12);
   margin-bottom: var(--space-16);
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
 }
-.vendors-page__bar {
-  margin-bottom: var(--space-16);
+.vendors-page__table-card {
+  padding: var(--space-16);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-12);
+  box-shadow: var(--shadow-1);
+}
+.vendors-page__company {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.vendors-page__company-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-6);
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: var(--font-weight-600);
 }
 .vendors-page__kv {
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  overflow: hidden;
 }
 .vendors-page__kv div {
   display: flex;
   justify-content: space-between;
   gap: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+}
+.vendors-page__kv div + div {
+  border-top: 1px solid var(--color-border-subtle);
 }
 .vendors-page__kv span {
   color: var(--color-text-secondary);
@@ -270,6 +342,14 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+}
+.vendors-page__tabs {
+  margin-bottom: var(--space-4);
+}
+.vendors-page__sub {
+  margin: var(--space-16) 0 var(--space-8);
+  font-size: 14px;
+  font-weight: var(--font-weight-600);
 }
 .vendors-page__tag {
   display: flex;

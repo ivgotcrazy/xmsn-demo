@@ -116,3 +116,11 @@ class RequestSnapshot(BaseModel):
 class RequestSnapshotListResponse(BaseModel):
     requests: list[RequestSnapshot]
     total: int
+
+
+class DeleteResponse(BaseModel):
+    """逻辑删除结果：数据保留（deleted_at 标记），仅从可见列表移除（所有数据有挖掘价值）。"""
+
+    id: str
+    deleted: bool = True
+    deleted_at: datetime

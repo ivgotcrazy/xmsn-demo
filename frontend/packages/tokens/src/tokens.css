@@ -133,6 +133,17 @@
   --width-drawer: 640px;
   --breakpoint-lg: 1440px;
 
+  /* 管理后台深色侧栏（03B 深蓝主题，COMP-039） */
+  --color-sidebar-bg: #0f1e35;
+  --color-sidebar-text: #e2e8f0;
+  --color-sidebar-text-muted: #94a3b8;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --color-sidebar-active-bg: rgba(37, 99, 235, 0.28);
+  --color-sidebar-active-text: #ffffff;
+  --color-sidebar-border: rgba(255, 255, 255, 0.08);
+  --color-sidebar-brand: #ffffff;
+  --color-sidebar-brand-accent: #60a5fa;
+
   --color-match-success-bg: var(--green-50);
   --color-match-warning-bg: var(--amber-50);
   --color-match-error-bg: var(--red-50);

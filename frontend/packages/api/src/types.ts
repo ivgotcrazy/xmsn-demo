@@ -1,12 +1,29 @@
 /* 生成物（只读勿手改）—— 由 scripts/generate.ts 从 openapi.json 契约快照生成 */
 
+export type AdminLogItem = {
+  log_id: string;
+  action: string;
+  action_label?: string;
+  target_type?: (string | null);
+  target_id?: (string | null);
+  admin_name?: string;
+  detail?: Record<string, unknown>;
+  created_at: string;
+};
+export type AdminLogListResponse = {
+  list: AdminLogItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
 export type AdminRequestItem = {
   request_id: string;
   conversation_id: string;
   version: number;
   structured_demand?: Record<string, unknown>;
+  buyer_phone?: string;
+  run?: (MatchRun | null);
   created_at: string;
-  match_count?: number;
 };
 export type AdminRequestListResponse = {
   list: AdminRequestItem[];
@@ -19,6 +36,11 @@ export type AdminStatsResponse = {
   total_requests: number;
   total_vendors: number;
   total_matches: number;
+};
+export type ApiResponse_AdminLogListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (AdminLogListResponse | null);
 };
 export type ApiResponse_AdminRequestListResponse_ = {
   code?: number;
@@ -39,6 +61,11 @@ export type ApiResponse_AuthToken_ = {
   code?: number;
   message?: string;
   data?: (AuthToken | null);
+};
+export type ApiResponse_BuyerListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (BuyerListResponse | null);
 };
 export type ApiResponse_CapabilityOut_ = {
   code?: number;
@@ -64,6 +91,11 @@ export type ApiResponse_ConversationStartResponse_ = {
   code?: number;
   message?: string;
   data?: (ConversationStartResponse | null);
+};
+export type ApiResponse_DeleteResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (DeleteResponse | null);
 };
 export type ApiResponse_DocumentPreviewResponse_ = {
   code?: number;
@@ -149,6 +181,22 @@ export type Body_upload_capability_api_v1_vendor_capability_upload_post = {
   free_text?: string;
   documents?: string[];
 };
+export type BuyerItem = {
+  user_id: string;
+  phone: string;
+  email?: (string | null);
+  status?: "active" | "disabled";
+  conversation_count?: number;
+  request_count?: number;
+  last_active_at?: (string | null);
+  created_at: string;
+};
+export type BuyerListResponse = {
+  list: BuyerItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
 export type CapabilityOut = {
   capability_id: string;
   vendor_id: string;
@@ -204,6 +252,11 @@ export type ConversationStartResponse = {
   demand_points?: DemandPoint[];
   title?: string;
 };
+export type DeleteResponse = {
+  id: string;
+  deleted?: boolean;
+  deleted_at: string;
+};
 export type DemandPoint = {
   key: string;
   label: string;
@@ -233,9 +286,8 @@ export type MatchComputeRequest = {
   request_id: string;
 };
 export type MatchComputeResponse = {
-  match_results: MatchItem[];
-  total_matches: number;
-  computation_time_ms: number;
+  run: MatchRun;
+  match_results?: MatchItem[];
   demand_points?: DemandPoint[];
 };
 export type MatchDetailResponse = {
@@ -272,6 +324,15 @@ export type MatchParam = {
   source_doc_name?: (string | null);
   source_page?: (number | null);
   source_text?: (string | null);
+};
+export type MatchRun = {
+  run_id: string;
+  request_id: string;
+  status?: "running" | "done" | "empty";
+  total_vendors?: number;
+  best_score?: (number | null);
+  computation_time_ms?: number;
+  created_at: string;
 };
 export type MessageRequest = {
   conversation_id: string;

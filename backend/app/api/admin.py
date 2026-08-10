@@ -5,10 +5,12 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import AdminUser
 from app.schemas.admin import (
+    AdminLogListResponse,
     AdminRequestListResponse,
     AdminStatsResponse,
     AuditRequest,
     AuditResponse,
+    BuyerListResponse,
     VendorListResponse,
 )
 from app.schemas.common import ApiResponse, err_501
@@ -42,4 +44,25 @@ async def list_requests(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[AdminRequestListResponse]:
+    raise err_501("契约层占位：M3 实现")
+
+
+@router.get("/buyers", response_model=ApiResponse[BuyerListResponse], summary="买家列表（搜索/状态筛选，分页）")
+async def list_buyers(
+    admin: AdminUser,
+    keyword: str | None = Query(default=None, description="手机号/邮箱关键词"),
+    status: str | None = Query(default=None, description="active/disabled"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[BuyerListResponse]:
+    raise err_501("契约层占位：M3 实现")
+
+
+@router.get("/logs", response_model=ApiResponse[AdminLogListResponse], summary="事件日志（审计，按动作筛选，分页）")
+async def list_logs(
+    admin: AdminUser,
+    action: str | None = Query(default=None, description="动作类型"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[AdminLogListResponse]:
     raise err_501("契约层占位：M3 实现")

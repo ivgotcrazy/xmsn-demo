@@ -68,6 +68,14 @@ export const handlers = [
     const data = await resolveMock("GET /api/v1/conversation/{conversation_id}/requests", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
+  http.delete("*/api/v1/conversation/:conversation_id", async ({ request }) => {
+    const data = await resolveMock("DELETE /api/v1/conversation/{conversation_id}", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
+  http.delete("*/api/v1/conversation/:conversation_id/requests/:request_id", async ({ request }) => {
+    const data = await resolveMock("DELETE /api/v1/conversation/{conversation_id}/requests/{request_id}", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
   http.get("*/api/v1/conversations", async ({ request }) => {
     const data = await resolveMock("GET /api/v1/conversations", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
@@ -94,6 +102,14 @@ export const handlers = [
   }),
   http.get("*/api/v1/admin/requests", async ({ request }) => {
     const data = await resolveMock("GET /api/v1/admin/requests", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
+  http.get("*/api/v1/admin/buyers", async ({ request }) => {
+    const data = await resolveMock("GET /api/v1/admin/buyers", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
+  http.get("*/api/v1/admin/logs", async ({ request }) => {
+    const data = await resolveMock("GET /api/v1/admin/logs", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
   http.get("*/api/v1/documents/:doc_id/preview", async ({ request }) => {

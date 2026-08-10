@@ -95,6 +95,8 @@ class Conversation(Base):
     title: Mapped[str] = mapped_column(String(100), default="新会话")
     conversation_history: Mapped[list] = mapped_column(JSONB, default=list)
     current_slots: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # 逻辑删除标记（数据有挖掘价值，仅从可见列表移除）
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -112,6 +114,8 @@ class BuyerRequest(Base):
     structured_demand: Mapped[dict] = mapped_column(JSONB, default=dict)
     embedding_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="confirmed")
+    # 逻辑删除标记（需求档案/匹配有挖掘价值，仅从可见列表移除）
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -150,6 +154,28 @@ class UserProfile(Base):
     )
 
 
+class MatchRun(Base):
+    """匹配实体 = 一次匹配行为（1:1 锚定需求档案）。物化统计，查询免实时计算。
+
+    同需求点集重新匹配 = 生成新需求档案 + 新匹配实体；故 request_id 当前 1:1 唯一。
+    """
+
+    __tablename__ = "match_runs"
+    __table_args__ = (
+        CheckConstraint("status IN ('running','done','empty')", name="ck_match_runs_status"),
+        Index("uq_match_runs_request", "request_id", unique=True),
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("buyer_requests.request_id")
+    )
+    status: Mapped[str] = mapped_column(String(20), default="done")
+    total_vendors: Mapped[int] = mapped_column(Integer, default=0)
+    best_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    computation_time_ms: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class MatchResult(Base):
     __tablename__ = "match_results"
     __table_args__ = (
@@ -158,6 +184,9 @@ class MatchResult(Base):
         Index("idx_match_vendor", "vendor_id"),
     )
     match_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_runs.run_id"), nullable=False
+    )
     request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("buyer_requests.request_id"))
     vendor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vendors.vendor_id"))
     match_score: Mapped[float | None] = mapped_column(Float, nullable=True)

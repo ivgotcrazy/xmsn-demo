@@ -100,6 +100,12 @@ function detectProduct(message: string): string | undefined {
   return undefined
 }
 
+// 逻辑删除状态（仅 dev mock；真实后端用 deleted_at 标记过滤，数据保留有挖掘价值）
+const deletedConversations = new Set<string>()
+const deletedRequests = new Set<string>()
+
+const deletedAt = (): string => new Date().toISOString()
+
 export const mockData: Record<string, MockResolver | unknown> = {
   // ---- auth ----
   "POST /api/v1/auth/login": (request: Request) =>
@@ -302,8 +308,8 @@ export const mockData: Record<string, MockResolver | unknown> = {
     version: 2,
     redirect_to: "",
   }),
-  "GET /api/v1/conversations": () => ({
-    conversations: [
+  "GET /api/v1/conversations": () => {
+    const all = [
       {
         conversation_id: "conv-001",
         title: "机顶盒",
@@ -320,40 +326,52 @@ export const mockData: Record<string, MockResolver | unknown> = {
         last_request_id: null,
         request_count: 0,
       },
-    ],
-    total: 2,
-  }),
+    ]
+    const conversations = all.filter((c) => !deletedConversations.has(c.conversation_id))
+    return { conversations, total: conversations.length }
+  },
   "GET /api/v1/conversation/{conversation_id}/requests": (request: Request) => {
     const parts = new URL(request.url).pathname.split("/").filter(Boolean)
     const id = parts[parts.length - 2] ?? ""
     // 按会话维度：仅 conv-001（已确认）有匹配记录，其余会话（进行中）为空
     if (id === "conv-001") {
-      return {
-        requests: [
-          {
-            request_id: "req-001",
-            version: 1,
-            structured_demand: { product_type: "机顶盒", os_support: ["Linux"] },
-            created_at: "2026-08-05T09:00:00Z",
-            match_count: 5,
+      const all = [
+        {
+          request_id: "req-001",
+          version: 1,
+          structured_demand: { product_type: "机顶盒", os_support: ["Linux"] },
+          created_at: "2026-08-05T09:00:00Z",
+          match_count: 5,
+        },
+        {
+          request_id: "req-002",
+          version: 2,
+          structured_demand: {
+            product_type: "机顶盒",
+            os_support: ["Linux"],
+            interfaces: ["网口", "USB"],
+            min_order_qty: 5000,
           },
-          {
-            request_id: "req-002",
-            version: 2,
-            structured_demand: {
-              product_type: "机顶盒",
-              os_support: ["Linux"],
-              interfaces: ["网口", "USB"],
-              min_order_qty: 5000,
-            },
-            created_at: "2026-08-05T09:30:00Z",
-            match_count: 3,
-          },
-        ],
-        total: 2,
-      }
+          created_at: "2026-08-05T09:30:00Z",
+          match_count: 3,
+        },
+      ]
+      const requests = all.filter((r) => !deletedRequests.has(r.request_id))
+      return { requests, total: requests.length }
     }
     return { requests: [], total: 0 }
+  },
+  "DELETE /api/v1/conversation/{conversation_id}": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const id = parts[parts.length - 1] ?? ""
+    deletedConversations.add(id)
+    return { id, deleted: true, deleted_at: deletedAt() }
+  },
+  "DELETE /api/v1/conversation/{conversation_id}/requests/{request_id}": (request: Request) => {
+    const parts = new URL(request.url).pathname.split("/").filter(Boolean)
+    const requestId = parts[parts.length - 1] ?? ""
+    deletedRequests.add(requestId)
+    return { id: requestId, deleted: true, deleted_at: deletedAt() }
   },
   "GET /api/v1/conversation/{conversation_id}/messages": (request: Request) => {
     const parts = new URL(request.url).pathname.split("/").filter(Boolean)
@@ -416,8 +434,34 @@ export const mockData: Record<string, MockResolver | unknown> = {
       .json()
       .then((body: { request_id?: string }) => {
         const requestId = body.request_id ?? ""
-        // 一个需求档案（request_id）对应多个匹配结果；随结果返回该档案的需求点集合
+        // 空匹配示例：需求已提交匹配，但本次未找到任何合适厂商（匹配实体仍存在 status=empty）
+        if (requestId === "req-003") {
+          return {
+            run: {
+              run_id: "run-003",
+              request_id: "req-003",
+              status: "empty",
+              total_vendors: 0,
+              best_score: null,
+              computation_time_ms: 820,
+              created_at: "2026-08-09T11:00:00Z",
+            },
+            match_results: [],
+            demand_points: DEMAND_POINTS_STB,
+          }
+        }
+        // 正常匹配：一个需求档案对应一个匹配实体（run），run 下挂多个厂商匹配结果
+        const runId = requestId === "req-002" ? "run-002" : "run-001"
         return {
+          run: {
+            run_id: runId,
+            request_id: requestId,
+            status: "done",
+            total_vendors: 3,
+            best_score: 92.5,
+            computation_time_ms: 1250,
+            created_at: "2026-08-05T09:30:00Z",
+          },
           match_results: [
             {
               match_id: "m-001",
@@ -462,15 +506,20 @@ export const mockData: Record<string, MockResolver | unknown> = {
               unmatched_count: 5,
             },
           ],
-          total_matches: 3,
-          computation_time_ms: 1250,
           demand_points: requestId === "req-002" ? DEMAND_POINTS_STB : DEMAND_POINTS_STB,
         }
       })
       .catch(() => ({
+        run: {
+          run_id: "run-err",
+          request_id: "",
+          status: "empty",
+          total_vendors: 0,
+          best_score: null,
+          computation_time_ms: 0,
+          created_at: "2026-08-10T00:00:00Z",
+        },
         match_results: [],
-        total_matches: 0,
-        computation_time_ms: 0,
         demand_points: [],
       })),
   "GET /api/v1/match/detail/{match_id}": (request: Request) => {
@@ -581,6 +630,27 @@ export const mockData: Record<string, MockResolver | unknown> = {
     total_vendors: 6,
     total_matches: 58,
   }),
+  "GET /api/v1/admin/buyers": (request: Request) => {
+    const url = new URL(request.url)
+    const keyword = (url.searchParams.get("keyword") ?? "").trim().toLowerCase()
+    const status = url.searchParams.get("status")
+    const all = [
+      { user_id: "u-buyer-001", phone: "13900000001", email: "buyer@xmsn.demo", status: "active", conversation_count: 2, request_count: 2, last_active_at: "2026-08-10T08:00:00Z", created_at: "2026-08-01T08:00:00Z" },
+      { user_id: "u-buyer-002", phone: "13912340002", email: "lihua@qq.com", status: "active", conversation_count: 5, request_count: 4, last_active_at: "2026-08-09T14:20:00Z", created_at: "2026-08-02T09:00:00Z" },
+      { user_id: "u-buyer-003", phone: "13912340003", email: "wangfang@163.com", status: "active", conversation_count: 3, request_count: 2, last_active_at: "2026-08-08T11:00:00Z", created_at: "2026-08-03T10:30:00Z" },
+      { user_id: "u-buyer-004", phone: "13912340004", email: "zhangwei@aliyun.com", status: "active", conversation_count: 1, request_count: 1, last_active_at: "2026-08-07T16:45:00Z", created_at: "2026-08-04T13:00:00Z" },
+      { user_id: "u-buyer-005", phone: "13912340005", email: "chenjing@outlook.com", status: "disabled", conversation_count: 4, request_count: 3, last_active_at: "2026-08-05T09:30:00Z", created_at: "2026-08-05T09:00:00Z" },
+      { user_id: "u-buyer-006", phone: "13912340006", email: "liuyang@126.com", status: "active", conversation_count: 7, request_count: 6, last_active_at: "2026-08-10T09:10:00Z", created_at: "2026-08-06T15:20:00Z" },
+      { user_id: "u-buyer-007", phone: "13912340007", email: "zhaolei@qq.com", status: "active", conversation_count: 2, request_count: 1, last_active_at: "2026-08-06T10:00:00Z", created_at: "2026-08-07T08:40:00Z" },
+      { user_id: "u-buyer-008", phone: "13912340008", email: "sunli@163.com", status: "active", conversation_count: 0, request_count: 0, last_active_at: null, created_at: "2026-08-08T12:00:00Z" },
+    ]
+    let list = all
+    if (status) list = list.filter((b) => b.status === status)
+    if (keyword) {
+      list = list.filter((b) => b.phone.toLowerCase().includes(keyword) || (b.email ?? "").toLowerCase().includes(keyword))
+    }
+    return { list, total: list.length, page: 1, page_size: 20 }
+  },
   "GET /api/v1/admin/requests": () => ({
     list: [
       {
@@ -592,22 +662,73 @@ export const mockData: Record<string, MockResolver | unknown> = {
           os_support: ["Linux"],
           min_order_qty: 5000,
         },
+        buyer_phone: "13900000001",
         created_at: "2026-08-05T09:30:00Z",
-        match_count: 3,
+        run: {
+          run_id: "run-001",
+          request_id: "req-001",
+          status: "done",
+          total_vendors: 3,
+          best_score: 92.5,
+          computation_time_ms: 1250,
+          created_at: "2026-08-05T09:30:00Z",
+        },
       },
       {
         request_id: "req-002",
         conversation_id: "conv-003",
         version: 1,
         structured_demand: { product_type: "智能音箱", os_support: ["Android"] },
+        buyer_phone: "13912340002",
         created_at: "2026-08-06T07:00:00Z",
-        match_count: 2,
+        run: {
+          run_id: "run-002",
+          request_id: "req-002",
+          status: "done",
+          total_vendors: 2,
+          best_score: 81.0,
+          computation_time_ms: 980,
+          created_at: "2026-08-06T07:00:00Z",
+        },
+      },
+      {
+        request_id: "req-003",
+        conversation_id: "conv-002",
+        version: 1,
+        structured_demand: { product_type: "智能音箱", os_support: ["Linux"], appearance: "白色" },
+        buyer_phone: "13912340005",
+        created_at: "2026-08-09T11:00:00Z",
+        run: {
+          run_id: "run-003",
+          request_id: "req-003",
+          status: "empty",
+          total_vendors: 0,
+          best_score: null,
+          computation_time_ms: 820,
+          created_at: "2026-08-09T11:00:00Z",
+        },
       },
     ],
-    total: 2,
+    total: 3,
     page: 1,
     page_size: 20,
   }),
+  "GET /api/v1/admin/logs": (request: Request) => {
+    const url = new URL(request.url)
+    const action = url.searchParams.get("action")
+    const all = [
+      { log_id: "log-001", action: "vendor_audit", action_label: "厂商审核", target_type: "vendor", target_id: "v-003", admin_name: "管理员", detail: { result: "通过", vendor: "惠州华创电子" }, created_at: "2026-08-07T06:00:00Z" },
+      { log_id: "log-002", action: "vendor_audit", action_label: "厂商审核", target_type: "vendor", target_id: "v-001", admin_name: "管理员", detail: { result: "通过", vendor: "东莞某某电子有限公司" }, created_at: "2026-08-06T05:00:00Z" },
+      { log_id: "log-003", action: "login", action_label: "管理员登录", target_type: "admin", target_id: "u-admin-001", admin_name: "管理员", detail: { phone: "13800000000" }, created_at: "2026-08-10T08:05:00Z" },
+      { log_id: "log-004", action: "login", action_label: "管理员登录", target_type: "admin", target_id: "u-admin-001", admin_name: "管理员", detail: { phone: "13800000000" }, created_at: "2026-08-09T09:00:00Z" },
+      { log_id: "log-005", action: "export", action_label: "导出数据", target_type: "request", target_id: "req-001", admin_name: "管理员", detail: { file: "requests.csv", rows: 3 }, created_at: "2026-08-10T10:20:00Z" },
+      { log_id: "log-006", action: "config_change", action_label: "配置变更", target_type: "config", target_id: "match_threshold", admin_name: "管理员", detail: { key: "match_threshold", value: 0.3 }, created_at: "2026-08-08T14:00:00Z" },
+      { log_id: "log-007", action: "vendor_audit", action_label: "厂商审核", target_type: "vendor", target_id: "v-002", admin_name: "管理员", detail: { result: "驳回", vendor: "深圳智联科技", comment: "资料不完整" }, created_at: "2026-08-05T11:30:00Z" },
+      { log_id: "log-008", action: "export", action_label: "导出数据", target_type: "buyer", target_id: "u-buyer-001", admin_name: "管理员", detail: { file: "requests.csv", rows: 8 }, created_at: "2026-08-10T11:00:00Z" },
+    ]
+    const list = action ? all.filter((l) => l.action === action) : all
+    return { list, total: list.length, page: 1, page_size: 20 }
+  },
 
   // ---- documents ----
   "GET /api/v1/documents/{doc_id}/preview": () => ({

@@ -31,6 +31,18 @@ const routes = [
     component: () => import("@/views/admin/VendorsView.vue"),
     meta: { title: "厂商产品查看", requiresAuth: true, requiresAdmin: true },
   },
+  {
+    path: "/admin/buyers",
+    name: "admin-buyers",
+    component: () => import("@/views/admin/BuyersView.vue"),
+    meta: { title: "买家管理", requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: "/admin/logs",
+    name: "admin-logs",
+    component: () => import("@/views/admin/LogsView.vue"),
+    meta: { title: "事件日志", requiresAuth: true, requiresAdmin: true },
+  },
   { path: "/:pathMatch(.*)*", redirect: "/admin/dashboard" },
 ]
 

@@ -14,6 +14,7 @@ import {
   type DemandPoint,
   type MatchDetailResponse,
   type MatchItem,
+  type MatchRun,
 } from "@xmsn/api"
 
 import DemandProfileCard from "@/components/business/DemandProfileCard.vue"
@@ -26,6 +27,7 @@ const message = useMessage()
 
 const items = ref<MatchItem[]>([])
 const total = ref(0)
+const run = ref<MatchRun | null>(null)
 const demandPoints = ref<DemandPoint[]>([])
 const selectedId = ref("")
 const selectedItem = ref<MatchItem | null>(null)
@@ -38,13 +40,23 @@ const productType = computed(() => {
   return p ? String(Array.isArray(p.value) ? p.value.join("/") : p.value) : ""
 })
 
+/** 匹配实体元信息行（物化字段，无需实时统计）：共 N 家 · 最佳 X% · 耗时 Y。 */
+const runMeta = computed(() => {
+  if (!run.value) return ""
+  const parts = [`共 ${run.value.total_vendors ?? 0} 家`]
+  if (run.value.best_score != null) parts.push(`最佳 ${run.value.best_score}%`)
+  if (run.value.computation_time_ms) parts.push(`耗时 ${(run.value.computation_time_ms / 1000).toFixed(2)}s`)
+  return parts.join(" · ")
+})
+
 async function load(): Promise<void> {
   computing.value = true
   try {
     const requestId = (route.params.requestId as string) || "req-001"
     const res = await matchCompute({ request_id: requestId })
-    items.value = res.match_results
-    total.value = res.total_matches
+    run.value = res.run ?? null
+    items.value = res.match_results ?? []
+    total.value = run.value?.total_vendors ?? items.value.length
     demandPoints.value = res.demand_points ?? []
     if (items.value.length) {
       await select(items.value[0].match_id)
@@ -95,6 +107,7 @@ onMounted(() => {
     <header class="matches-page__head">
       <NButton text size="small" @click="goBack()">← 返回</NButton>
       <h2>匹配结果<template v-if="productType"> · {{ productType }}</template></h2>
+      <span v-if="runMeta" class="matches-page__meta">{{ runMeta }}</span>
     </header>
 
     <div v-if="computing" class="matches-page__loading"><NSpin>匹配计算中…</NSpin></div>
@@ -119,7 +132,12 @@ onMounted(() => {
               @open="select(it.match_id)"
             />
           </div>
-          <div v-if="!items.length" class="matches-page__empty">暂无精确匹配的工厂</div>
+          <div v-if="!items.length && run?.status === 'empty'" class="matches-page__empty">
+            本次匹配已执行，但未找到合适的工厂
+          </div>
+          <div v-if="!items.length && run?.status !== 'empty'" class="matches-page__empty">
+            暂无匹配结果
+          </div>
         </div>
       </div>
 
@@ -152,6 +170,11 @@ onMounted(() => {
 .matches-page__head h2 {
   margin: 0;
   font-size: var(--font-size-18);
+}
+.matches-page__meta {
+  margin-left: var(--space-8);
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 .matches-page__loading,
 .matches-page__empty {

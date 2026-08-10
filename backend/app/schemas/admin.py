@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.common import PageData
+from app.schemas.match import MatchRun
 
 
 class AuditRequest(BaseModel):
@@ -44,13 +45,50 @@ class AdminStatsResponse(BaseModel):
 
 
 class AdminRequestItem(BaseModel):
+    """需求匹配列表项（行=需求档案=一次匹配；run 内嵌匹配实体，含物化统计）。"""
+
     request_id: str
     conversation_id: str
     version: int
     structured_demand: dict = Field(default_factory=dict)
+    buyer_phone: str = ""
+    run: MatchRun | None = None
     created_at: datetime
-    match_count: int = 0
 
 
 class AdminRequestListResponse(PageData[AdminRequestItem]):
+    pass
+
+
+class BuyerItem(BaseModel):
+    """买家列表项（users 表 role='buyer' + 关联统计，一次性返回避免逐行联查）。"""
+
+    user_id: str
+    phone: str
+    email: str | None = None
+    status: Literal["active", "disabled"] = "active"
+    conversation_count: int = 0
+    request_count: int = 0
+    last_active_at: datetime | None = None
+    created_at: datetime
+
+
+class BuyerListResponse(PageData[BuyerItem]):
+    pass
+
+
+class AdminLogItem(BaseModel):
+    """事件日志项（admin_logs 审计：管理员操作/登录/导出等，append-only）。"""
+
+    log_id: str
+    action: str
+    action_label: str = ""
+    target_type: str | None = None
+    target_id: str | None = None
+    admin_name: str = ""
+    detail: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+class AdminLogListResponse(PageData[AdminLogItem]):
     pass

@@ -3,14 +3,16 @@
  * 02A 需求对话 Agent（原型）：顶部标题栏 + 新建/我的会话，底部输入栏含"完成需求描述"，
  * 右侧"当前需求"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
  */
-import { onMounted, ref } from "vue"
+import { h, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { NButton, NInput, NTag, useMessage } from "naive-ui"
+import { NButton, NInput, NPopconfirm, NTag, useMessage } from "naive-ui"
 
 import {
   conversationConfirm,
+  conversationConversationId,
   conversationConversationIdMessages,
   conversationConversationIdRequests,
+  conversationConversationIdRequestsRequestId,
   conversationMessage,
   conversationStart,
   conversations,
@@ -73,18 +75,6 @@ async function onFileSelected(e: Event): Promise<void> {
 
 function removeAttachment(name: string): void {
   attachments.value = attachments.value.filter((a) => a.name !== name)
-}
-
-const STATUS: Record<string, { label: string; type: "success" | "default" | "warning" }> = {
-  confirmed: { label: "已确认", type: "success" },
-  active: { label: "进行中", type: "default" },
-  closed: { label: "已关闭", type: "warning" },
-}
-function statusLabel(s: string): string {
-  return STATUS[s]?.label ?? s
-}
-function statusType(s: string): "success" | "default" | "warning" {
-  return STATUS[s]?.type ?? "default"
 }
 
 /** 产品类型前置校验：需求点中是否已明确产品类型（匹配锚点）。 */
@@ -306,6 +296,35 @@ function recordTitle(r: RequestSnapshot): string {
   return pt ? String(pt) : "需求匹配"
 }
 
+/** 逻辑删除会话（deleted_at 标记，数据保留）：确认后从列表移除；若删除当前会话，切换到剩余首个。 */
+async function deleteSession(s: ConversationListItem): Promise<void> {
+  try {
+    await conversationConversationId(s.conversation_id)
+    sessions.value = sessions.value.filter((x) => x.conversation_id !== s.conversation_id)
+    if (activeId.value === s.conversation_id) {
+      if (sessions.value.length) {
+        await openConversation(sessions.value[0].conversation_id)
+      } else {
+        await newSession()
+      }
+    }
+    message.success("会话已删除（数据已保留）")
+  } catch {
+    message.error("删除会话失败")
+  }
+}
+
+/** 逻辑删除匹配记录（需求档案，数据保留）。 */
+async function deleteRecord(r: RequestSnapshot): Promise<void> {
+  try {
+    await conversationConversationIdRequestsRequestId(conversationId.value, r.request_id)
+    records.value = records.value.filter((x) => x.request_id !== r.request_id)
+    message.success("匹配记录已删除（数据已保留）")
+  } catch {
+    message.error("删除匹配记录失败")
+  }
+}
+
 onMounted(() => {
   void init()
 })
@@ -329,12 +348,22 @@ onMounted(() => {
         >
           <div class="chat-page__rail-top">
             <span class="chat-page__rail-id">{{ s.title || s.conversation_id }}</span>
-            <NTag size="small" :type="statusType(s.status)" :bordered="false">
-              {{ statusLabel(s.status) }}
-            </NTag>
+            <NPopconfirm
+              @positive-click="deleteSession(s)"
+              positive-text="删除"
+              negative-text="取消"
+            >
+              <template #trigger>
+                <NButton text size="small" class="chat-page__rail-del" @click.stop>
+                  删除
+                </NButton>
+              </template>
+              删除该会话？
+            </NPopconfirm>
           </div>
           <div class="chat-page__rail-meta">
-            请求 {{ s.request_count ?? 0 }} 次 · {{ formatSessionTime(s.updated_at) }}
+            <span class="chat-page__rail-time">{{ formatSessionTime(s.updated_at) }}</span>
+            <span class="chat-page__rail-count">匹配 {{ s.request_count ?? 0 }} 次</span>
           </div>
         </div>
         <div v-if="!sessions.length" class="chat-page__rail-empty">暂无会话</div>
@@ -411,7 +440,7 @@ onMounted(() => {
               <DemandProfileCard :points="demandPoints" />
             </div>
             <div v-if="hasProductType() && !asideCollapsed" class="chat-page__demand-footer">
-              <NButton type="primary" block @click="confirm()">确认并提交匹配 →</NButton>
+              <NButton type="primary" block @click="confirm()">提交匹配 →</NButton>
             </div>
           </div>
 
@@ -431,18 +460,27 @@ onMounted(() => {
                 暂无匹配结果，完成需求并提交匹配后生成
               </div>
               <div v-else class="chat-page__records-list">
-                <div
-                  v-for="r in records"
-                  :key="r.request_id"
-                  class="chat-page__record"
-                  @click="openRecord(r.request_id)"
-                >
+                <div v-for="r in records" :key="r.request_id" class="chat-page__record">
                   <div class="chat-page__record-top">
-                    <span class="chat-page__record-name">{{ recordTitle(r) }}</span>
-                    <span class="chat-page__record-version">v{{ r.version }}</span>
+                    <span class="chat-page__record-name" @click="openRecord(r.request_id)">
+                      {{ recordTitle(r) }}
+                    </span>
+                    <NPopconfirm
+                      @positive-click="deleteRecord(r)"
+                      positive-text="删除"
+                      negative-text="取消"
+                    >
+                      <template #trigger>
+                        <NButton text size="small" type="error" class="chat-page__record-del" @click.stop>
+                          删除
+                        </NButton>
+                      </template>
+                      删除该匹配记录？
+                    </NPopconfirm>
                   </div>
                   <div class="chat-page__record-meta">
-                    {{ r.match_count ?? 0 }} 家 · {{ r.created_at }}
+                    <span class="chat-page__record-time">{{ formatSessionTime(r.created_at) }}</span>
+                    <span class="chat-page__record-count">找到 {{ r.match_count ?? 0 }} 家</span>
                   </div>
                 </div>
               </div>
@@ -518,11 +556,18 @@ onMounted(() => {
 }
 .chat-page__rail-meta {
   margin-top: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
   font-size: var(--font-size-12);
   color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+.chat-page__rail-del {
+  color: var(--color-text-secondary);
+}
+.chat-page__rail-del:hover {
+  color: var(--color-error);
 }
 .chat-page__rail-empty {
   padding: var(--space-24);
@@ -690,12 +735,18 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chat-page__record-version {
-  font-size: var(--font-size-12);
+.chat-page__record-del {
   color: var(--color-text-secondary);
+}
+.chat-page__record-del:hover {
+  color: var(--color-error);
 }
 .chat-page__record-meta {
   margin-top: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
   font-size: var(--font-size-12);
   color: var(--color-text-secondary);
 }

@@ -37,8 +37,15 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="admin-login">
+    <!-- 左上角品牌 + slogan（点分隔） -->
+    <div class="admin-login__brand">
+      <span class="admin-login__brand-mark">需</span>
+      <span class="admin-login__brand-name">需脉枢纽</span>
+      <span class="admin-login__brand-slogan">· 智能语义匹配基础设施</span>
+    </div>
+
     <div class="admin-login__card">
-      <h1>需脉枢纽 · 管理后台</h1>
+      <h1 class="admin-login__title">管理后台</h1>
       <NForm label-placement="top">
         <NFormItem label="管理员账号">
           <NInput v-model:value="form.phone" placeholder="请输入管理员手机号" />
@@ -54,23 +61,56 @@ async function submit(): Promise<void> {
 
 <style scoped>
 .admin-login {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--color-bg);
+  background: linear-gradient(135deg, #0f1e35 0%, #1e3a8a 60%, #2563eb 100%);
+}
+.admin-login__brand {
+  position: absolute;
+  top: var(--space-24);
+  left: var(--space-24);
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.admin-login__brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-8);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 16px;
+  font-weight: var(--font-weight-700);
+}
+.admin-login__brand-name {
+  font-size: 16px;
+  font-weight: var(--font-weight-700);
+  color: #fff;
+}
+.admin-login__brand-slogan {
+  font-size: 13px;
+  font-weight: var(--font-weight-400);
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
 }
 .admin-login__card {
-  width: 360px;
+  width: 380px;
   padding: var(--space-32);
   background: var(--color-bg-panel);
   border-radius: var(--radius-16);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-modal);
 }
-.admin-login__card h1 {
+.admin-login__title {
   margin: 0 0 var(--space-24);
   text-align: center;
-  font-size: var(--font-size-18);
+  font-size: 20px;
+  font-weight: var(--font-weight-700);
   color: var(--color-primary);
 }
 </style>

@@ -1,6 +1,7 @@
 """匹配引擎契约（架构 6.3.3；路由 02B + 匹配详情页）。"""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -10,6 +11,21 @@ from app.schemas.conversation import DemandPoint
 
 class MatchComputeRequest(BaseModel):
     request_id: str
+
+
+class MatchRun(BaseModel):
+    """匹配实体 = 一次匹配行为（1:1 锚定一个需求档案）。物化统计字段，查询免实时计算。
+
+    status: running=计算中 / done=有厂商命中 / empty=本次匹配发生但无厂商命中。
+    """
+
+    run_id: str
+    request_id: str
+    status: Literal["running", "done", "empty"] = "done"
+    total_vendors: int = 0
+    best_score: float | None = None
+    computation_time_ms: int = 0
+    created_at: datetime
 
 
 class MatchItem(BaseModel):
@@ -28,12 +44,13 @@ class MatchItem(BaseModel):
 
 
 class MatchComputeResponse(BaseModel):
-    match_results: list[MatchItem]
-    total_matches: int
-    computation_time_ms: int
+    """一次匹配的整体结果：run（匹配实体，含物化统计）+ 厂商匹配结果列表（可为空）。"""
+
+    run: MatchRun
+    match_results: list[MatchItem] = Field(default_factory=list)
     demand_points: list[DemandPoint] = Field(
         default_factory=list,
-        description="本次匹配对应的需求档案（需求点集合；一个档案对应多个匹配结果）",
+        description="本次匹配对应的需求档案（需求点集合；一个档案对应一个匹配实体）",
     )
 
 

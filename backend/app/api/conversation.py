@@ -12,6 +12,7 @@ from app.schemas.conversation import (
     ConversationMessagesResponse,
     ConversationStartRequest,
     ConversationStartResponse,
+    DeleteResponse,
     FinishResponse,
     MessageRequest,
     MessageResponse,
@@ -56,4 +57,22 @@ async def list_messages(conversation_id: str, user: CurrentUser) -> ApiResponse[
 
 @router.get("/{conversation_id}/requests", response_model=ApiResponse[RequestSnapshotListResponse], summary="需求快照版本列表")
 async def list_requests(conversation_id: str, user: CurrentUser) -> ApiResponse[RequestSnapshotListResponse]:
+    raise err_501("契约层占位：M3 实现")
+
+
+@router.delete(
+    "/{conversation_id}",
+    response_model=ApiResponse[DeleteResponse],
+    summary="逻辑删除会话（deleted_at 标记，数据保留）",
+)
+async def delete_conversation(conversation_id: str, user: CurrentUser) -> ApiResponse[DeleteResponse]:
+    raise err_501("契约层占位：M3 实现")
+
+
+@router.delete(
+    "/{conversation_id}/requests/{request_id}",
+    response_model=ApiResponse[DeleteResponse],
+    summary="逻辑删除需求档案/匹配（deleted_at 标记，数据保留）",
+)
+async def delete_request(conversation_id: str, request_id: str, user: CurrentUser) -> ApiResponse[DeleteResponse]:
     raise err_501("契约层占位：M3 实现")
