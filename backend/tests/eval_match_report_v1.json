@@ -1,0 +1,115 @@
+{
+  "version": "v1",
+  "cases": [
+    {
+      "request_id": "6a00f0a2-f382-46c6-9a78-b1dabdafadb7",
+      "status": "done",
+      "total": 1,
+      "best_score": 87.0,
+      "time_ms": 4525,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    },
+    {
+      "request_id": "0b45482d-372e-48ee-9249-d10f3436112d",
+      "status": "done",
+      "total": 1,
+      "best_score": 83.0,
+      "time_ms": 1132,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    },
+    {
+      "request_id": "50d13183-5c55-4d09-8c86-7fdd9326cfd7",
+      "status": "done",
+      "total": 1,
+      "best_score": 78.0,
+      "time_ms": 1422,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    },
+    {
+      "request_id": "1d10cef8-88b4-4f41-bb0e-716108bab4c3",
+      "status": "done",
+      "total": 1,
+      "best_score": 78.0,
+      "time_ms": 180,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    },
+    {
+      "request_id": "cef63854-0672-48c4-9e9b-41475bd6d6fd",
+      "status": "done",
+      "total": 1,
+      "best_score": 81.0,
+      "time_ms": 1064,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    },
+    {
+      "request_id": "aec06b8b-6b22-4b60-90b8-2e85d9503412",
+      "status": "empty",
+      "total": 0,
+      "best_score": null,
+      "time_ms": 139,
+      "top_vendors": [],
+      "sources": []
+    },
+    {
+      "request_id": "2a6f26a0-0702-42bc-a122-68383d6436cb",
+      "status": "done",
+      "total": 1,
+      "best_score": 82.0,
+      "time_ms": 1399,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    },
+    {
+      "request_id": "3e6bd7b7-7621-4a0b-bec2-a7cd862872cf",
+      "status": "done",
+      "total": 1,
+      "best_score": 82.0,
+      "time_ms": 883,
+      "top_vendors": [
+        "58918f2b-1e97-485c-9ae9-a14786cf803f"
+      ],
+      "sources": [
+        "llm"
+      ]
+    }
+  ],
+  "stability": {
+    "n": 3,
+    "best_scores": [
+      87.0,
+      87.0,
+      87.0
+    ],
+    "score_std": 0.0,
+    "top5_jaccard": 1.0
+  }
+}

@@ -14,9 +14,13 @@ from app.schemas.admin import (
     AuditRequest,
     AuditResponse,
     BuyerListResponse,
+    KnowledgeCreateRequest,
+    KnowledgeDeleteResponse,
+    KnowledgeItemOut,
+    KnowledgeListResponse,
     VendorListResponse,
 )
-from app.schemas.common import ApiResponse, err_501
+from app.schemas.common import ApiResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -43,8 +47,8 @@ async def list_vendors(
 
 
 @router.get("/stats", response_model=ApiResponse[AdminStatsResponse], summary="数据概览（四个统计卡片）")
-async def stats(admin: AdminUser) -> ApiResponse[AdminStatsResponse]:
-    raise err_501("契约层占位：M2 实现")
+async def stats(admin: AdminUser, db: AsyncSession = Depends(get_session)) -> ApiResponse[AdminStatsResponse]:
+    return ApiResponse(data=await admin_service.stats(db))
 
 
 @router.get("/requests", response_model=ApiResponse[AdminRequestListResponse], summary="需求与匹配查看（分页）")
@@ -52,8 +56,9 @@ async def list_requests(
     admin: AdminUser,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
 ) -> ApiResponse[AdminRequestListResponse]:
-    raise err_501("契约层占位：M3 实现")
+    return ApiResponse(data=await admin_service.list_requests(db, page, page_size))
 
 
 @router.get("/buyers", response_model=ApiResponse[BuyerListResponse], summary="买家列表（搜索/状态筛选，分页）")
@@ -63,8 +68,9 @@ async def list_buyers(
     status: str | None = Query(default=None, description="active/disabled"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
 ) -> ApiResponse[BuyerListResponse]:
-    raise err_501("契约层占位：M3 实现")
+    return ApiResponse(data=await admin_service.list_buyers(db, keyword, status, page, page_size))
 
 
 @router.get("/logs", response_model=ApiResponse[AdminLogListResponse], summary="事件日志（审计，按动作筛选，分页）")
@@ -73,5 +79,38 @@ async def list_logs(
     action: str | None = Query(default=None, description="动作类型"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
 ) -> ApiResponse[AdminLogListResponse]:
-    raise err_501("契约层占位：M3 实现")
+    return ApiResponse(data=await admin_service.list_logs(db, action, page, page_size))
+
+
+# ---- 领域知识管理（T6.1） ----
+
+
+@router.get("/knowledge", response_model=ApiResponse[KnowledgeListResponse], summary="领域知识列表（分页）")
+async def list_knowledge(
+    admin: AdminUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
+) -> ApiResponse[KnowledgeListResponse]:
+    return ApiResponse(data=await admin_service.list_knowledge(db, page, page_size))
+
+
+@router.post("/knowledge", response_model=ApiResponse[KnowledgeItemOut], summary="新增领域知识（向量化入库）")
+async def create_knowledge(
+    payload: KnowledgeCreateRequest,
+    admin: AdminUser,
+    db: AsyncSession = Depends(get_session),
+) -> ApiResponse[KnowledgeItemOut]:
+    return ApiResponse(data=await admin_service.create_knowledge(
+        db, payload.content, payload.category, payload.industry, admin.user_id))
+
+
+@router.delete("/knowledge/{knowledge_id}", response_model=ApiResponse[KnowledgeDeleteResponse], summary="删除领域知识")
+async def delete_knowledge(
+    knowledge_id: str,
+    admin: AdminUser,
+    db: AsyncSession = Depends(get_session),
+) -> ApiResponse[KnowledgeDeleteResponse]:
+    return ApiResponse(data=await admin_service.delete_knowledge(db, knowledge_id, admin.user_id))

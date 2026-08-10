@@ -153,11 +153,17 @@ function bodySchema(operation: any): any {
 function genClient(): string {
   const lines: string[] = []
   const typeImports = new Set<string>()
+  // 同名路径多方法时函数名加方法后缀，避免重复定义（如 GET+POST /admin/knowledge）
+  const methodCount: Record<string, number> = {}
+  for (const [path, item] of Object.entries(paths)) {
+    methodCount[path] = httpMethods.filter((m) => item[m]).length
+  }
   for (const [path, item] of Object.entries(paths)) {
     for (const method of httpMethods) {
       const op = item[method]
       if (!op) continue
-      const name = fnName(path)
+      const base = fnName(path)
+      const name = methodCount[path] > 1 ? base + method.charAt(0).toUpperCase() + method.slice(1) : base
       const params = pathParams(path)
       const queries = queryParams(op)
       const body = bodySchema(op)

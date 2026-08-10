@@ -92,3 +92,29 @@ class AdminLogItem(BaseModel):
 
 class AdminLogListResponse(PageData[AdminLogItem]):
     pass
+
+
+# ---- 领域知识管理（T6.1，M6 后台：增/删/列 + 向量化） ----
+
+class KnowledgeCreateRequest(BaseModel):
+    content: str = Field(..., min_length=4, max_length=2000, description="知识文本")
+    category: str | None = Field(default="terminology", description="terminology/trap/dependency/faq")
+    industry: str | None = Field(default=None, description="适用行业（如机顶盒；空=通用）")
+
+
+class KnowledgeItemOut(BaseModel):
+    knowledge_id: str
+    content: str
+    category: str | None = None
+    industry: str | None = None
+    source: str | None = None
+    created_at: datetime
+
+
+class KnowledgeListResponse(PageData[KnowledgeItemOut]):
+    pass
+
+
+class KnowledgeDeleteResponse(BaseModel):
+    knowledge_id: str
+    deleted: bool = True

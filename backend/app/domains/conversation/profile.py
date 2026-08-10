@@ -110,6 +110,31 @@ def _dimension_map(schema: ProfileSchema) -> dict:
     return {d["key"]: d for d in schema.dimensions}
 
 
+async def build_profile_context(db: AsyncSession, user_id: str) -> str:
+    """画像 → 对话引导上下文（T6.2，画像设计 6.1）：按 use_in_prompt 过滤 + 序列化摘要。
+
+    注入 Agent EXTRACT_PROMPT 的 user_profile 区块；无画像/无引导维度返回空串。
+    """
+    try:
+        prof = (await db.execute(
+            select(UserProfile).where(UserProfile.user_id == uuid.UUID(user_id))
+        )).scalar_one_or_none()
+        if not prof or not prof.profile_data:
+            return ""
+        schema = await ensure_active_schema(db)
+        dims = {d["key"]: d for d in schema.dimensions if d.get("use_in_prompt")}
+        parts = []
+        for k, v in (prof.profile_data or {}).items():
+            d = dims.get(k)
+            if not d or v in (None, "", []):
+                continue
+            parts.append(f"{d.get('name', k)}:{'、'.join(str(x) for x in v) if isinstance(v, list) else v}")
+        return "；".join(parts)
+    except Exception as exc:  # noqa: BLE001 - 画像注入失败静默（不阻塞对话）
+        logger.warning("profile context build failed: %s", exc)
+        return ""
+
+
 def _validate_value(dim: dict, value) -> bool:
     """type/enum 校验（画像设计 4.4）。"""
     t = dim.get("type")

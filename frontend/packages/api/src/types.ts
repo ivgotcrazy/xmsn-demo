@@ -102,6 +102,21 @@ export type ApiResponse_DocumentPreviewResponse_ = {
   message?: string;
   data?: (DocumentPreviewResponse | null);
 };
+export type ApiResponse_KnowledgeDeleteResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (KnowledgeDeleteResponse | null);
+};
+export type ApiResponse_KnowledgeItemOut_ = {
+  code?: number;
+  message?: string;
+  data?: (KnowledgeItemOut | null);
+};
+export type ApiResponse_KnowledgeListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (KnowledgeListResponse | null);
+};
 export type ApiResponse_MatchComputeResponse_ = {
   code?: number;
   message?: string;
@@ -270,6 +285,29 @@ export type DocumentPreviewResponse = {
 };
 export type HTTPValidationError = {
   detail?: ValidationError[];
+};
+export type KnowledgeCreateRequest = {
+  content: string;
+  category?: (string | null);
+  industry?: (string | null);
+};
+export type KnowledgeDeleteResponse = {
+  knowledge_id: string;
+  deleted?: boolean;
+};
+export type KnowledgeItemOut = {
+  knowledge_id: string;
+  content: string;
+  category?: (string | null);
+  industry?: (string | null);
+  source?: (string | null);
+  created_at: string;
+};
+export type KnowledgeListResponse = {
+  list: KnowledgeItemOut[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 export type LoginRequest = {
   phone?: (string | null);

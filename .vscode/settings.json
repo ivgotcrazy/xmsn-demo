@@ -28,5 +28,6 @@
   // --- 文件关联 ---
   "files.associations": {
     "*.vue": "vue"
-  }
+  },
+  "chat.agent.maxRequests": 100
 }

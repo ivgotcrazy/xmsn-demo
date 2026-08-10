@@ -31,8 +31,13 @@ async def chat(
     messages: list[dict],
     temperature: float | None = None,
     max_tokens: int = 2048,
-) -> str:
-    """调用对话模型并返回首个消息内容。"""
+    with_usage: bool = False,
+):
+    """调用对话模型并返回首个消息内容。
+
+    with_usage=True 时返回 (content, usage_dict)（M6 审计：prompt/completion/total tokens）；
+    其余调用方返回值不变（str）。
+    """
     if not settings.deepseek_api_key:
         raise RuntimeError("deepseek_api_key 未配置")
     client = get_client()
@@ -42,4 +47,13 @@ async def chat(
         temperature=temperature if temperature is not None else settings.llm_temperature,
         max_tokens=max_tokens,
     )
-    return resp.choices[0].message.content or ""
+    content = resp.choices[0].message.content or ""
+    if with_usage:
+        u = resp.usage
+        usage = {
+            "prompt_tokens": u.prompt_tokens,
+            "completion_tokens": u.completion_tokens,
+            "total_tokens": u.total_tokens,
+        } if u else {}
+        return content, usage
+    return content

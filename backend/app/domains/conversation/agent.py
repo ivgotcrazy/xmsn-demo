@@ -26,6 +26,9 @@ EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在�
 {fields}
 
 {knowledge}
+
+# 当前用户画像（历史需求偏好，引导用；可据此不重复询问已知信息）
+{user_profile}
 # 输出 JSON（严格，只含本次变更）
 {{
   "slot_delta": {{
@@ -100,7 +103,8 @@ def merge_slot(state: dict, slot_delta: dict, extra: list[str] | None = None) ->
         st = sv.get("state", SlotTriState.SET.value)
         val = sv.get("value")
         if st == SlotTriState.EXCLUDED.value:
-            state[key] = {"value": None, "state": SlotTriState.EXCLUDED.value}
+            # 保留被排除的值（负向硬过滤用，匹配详细设计 4.5）
+            state[key] = {"value": val, "state": SlotTriState.EXCLUDED.value}
         elif st == SlotTriState.WILDCARD.value:
             state[key] = {"value": None, "state": SlotTriState.WILDCARD.value}
         else:
@@ -151,6 +155,7 @@ async def extract_slots(state: dict, message: str, db=None, meta: dict | None = 
         category=product_type or "未定",
         fields=_fields_prompt(product_type),
         knowledge=knowledge or "（无）",
+        user_profile=(meta or {}).get("user_profile") or "（无）",
         message=message[:2000],
     )
     import time as _time
@@ -158,9 +163,11 @@ async def extract_slots(state: dict, message: str, db=None, meta: dict | None = 
     from app.db.models import LlmCallLog
     t0 = _time.perf_counter()
     raw = ""
+    usage: dict = {}
     ok = False
     try:
-        raw = await chat([{"role": "user", "content": prompt}], temperature=0.1, max_tokens=512)
+        raw, usage = await chat([{"role": "user", "content": prompt}], temperature=0.1, max_tokens=512,
+                                with_usage=True)
         data = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group(0))
         ok = True
         return {
@@ -181,6 +188,7 @@ async def extract_slots(state: dict, message: str, db=None, meta: dict | None = 
                     output_raw={"raw": raw[:4000]},
                     model=_settings.deepseek_model,
                     latency_ms=int((_time.perf_counter() - t0) * 1000),
+                    tokens=usage,
                     status="ok" if ok else "error",
                 ))
                 await db.commit()

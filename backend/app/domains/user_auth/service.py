@@ -93,6 +93,13 @@ async def login(db: AsyncSession, payload: LoginRequest) -> AuthToken:
     user = await _find_user(db, payload.phone, payload.email)
     if not user or not verify_password(payload.password, user.password_hash):
         raise err_401("账号或密码错误")
+    # M6 审计：管理员登录写 admin_logs（append-only）
+    if user.role == "admin":
+        from app.db.models import AdminLog
+
+        db.add(AdminLog(admin_user_id=user.user_id, action="login",
+                        target_type="admin", target_id=str(user.user_id), detail={"phone": user.phone}))
+        await db.commit()
     return _token(user)
 
 

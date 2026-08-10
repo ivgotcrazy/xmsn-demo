@@ -112,6 +112,18 @@ export const handlers = [
     const data = await resolveMock("GET /api/v1/admin/logs", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
+  http.get("*/api/v1/admin/knowledge", async ({ request }) => {
+    const data = await resolveMock("GET /api/v1/admin/knowledge", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
+  http.post("*/api/v1/admin/knowledge", async ({ request }) => {
+    const data = await resolveMock("POST /api/v1/admin/knowledge", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
+  http.delete("*/api/v1/admin/knowledge/:knowledge_id", async ({ request }) => {
+    const data = await resolveMock("DELETE /api/v1/admin/knowledge/{knowledge_id}", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
   http.get("*/api/v1/documents/:doc_id/preview", async ({ request }) => {
     const data = await resolveMock("GET /api/v1/documents/{doc_id}/preview", request)
     return HttpResponse.json({ code: 0, message: "ok", data })

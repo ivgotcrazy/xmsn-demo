@@ -78,16 +78,29 @@ def _title_of(state: dict) -> str:
 
 
 def _slots_pure(state: dict) -> dict:
-    """三态 slots → 纯值 dict（structured_demand 落库用；排除标记保留）。"""
+    """三态 slots → 纯值 dict（兼容旧快照读取；新快照用 _slots_snapshot）。"""
     out: dict = {}
     for k, sv in state.items():
         if k.startswith("_"):
             continue
         if isinstance(sv, dict) and "state" in sv:
             if sv["state"] == SlotTriState.EXCLUDED.value:
-                out[k] = {"excluded": True}
+                out[k] = {"excluded": True, "value": sv.get("value")}  # 保留排除值（M4 硬过滤）
             elif sv["state"] == SlotTriState.SET.value and sv.get("value") is not None:
                 out[k] = sv["value"]
+        elif k == "extra_constraints":
+            out[k] = sv
+    return out
+
+
+def _slots_snapshot(state: dict) -> dict:
+    """三态 slots → 三态快照（structured_demand 落库，对齐匹配详细设计 0.2/8.1：含 state/value/排除）。"""
+    out: dict = {}
+    for k, sv in state.items():
+        if k.startswith("_"):
+            continue
+        if isinstance(sv, dict) and "state" in sv:
+            out[k] = {"value": sv.get("value"), "state": sv["state"]}
         elif k == "extra_constraints":
             out[k] = sv
     return out
@@ -146,8 +159,11 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
         state = agent.write_option(state, key, val)
         slot_delta = {key: state[key]}
     else:
+        # T6.2 画像注入：读用户画像（use_in_prompt 维度）→ Agent 引导不重复询问
+        profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
         parsed = await agent.extract_slots(
-            state, text, db=db, meta={"conversation_id": conversation_id, "turn": turn}
+            state, text, db=db,
+            meta={"conversation_id": conversation_id, "turn": turn, "user_profile": profile_ctx},
         )
         state = agent.merge_slot(state, parsed.get("slot_delta", {}), parsed.get("extra_constraints", []))
         slot_delta = parsed.get("slot_delta", {})
@@ -216,7 +232,7 @@ async def confirm(db: AsyncSession, conversation_id: str, user_id: str) -> Confi
         conversation_id=conv.conversation_id,
         user_id=conv.user_id,
         version=version,
-        structured_demand=_slots_pure(state),
+        structured_demand=_slots_snapshot(state),
         status="confirmed",
     )
     db.add(req)
