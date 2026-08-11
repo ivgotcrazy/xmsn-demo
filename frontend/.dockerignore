@@ -1,0 +1,8 @@
+# 前端镜像构建忽略项（M8 T8.2）
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.git/
+*.log
+.DS_Store

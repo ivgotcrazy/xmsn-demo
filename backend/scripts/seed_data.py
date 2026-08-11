@@ -130,7 +130,7 @@ async def _seed_users(db) -> None:
             print(f"  user update: {phone} ({role}) 密码重置为演示密码")
             continue
         db.add(User(phone=phone, email=email, role=role,
-                    password_hash=hash_password(pwd), is_active=True))
+                    password_hash=hash_password(pwd), status="active"))
         print(f"  user create: {phone} ({role})")
     await db.commit()
 

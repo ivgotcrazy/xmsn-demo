@@ -12,14 +12,15 @@ xmsn-demo/
 └── README.md
 ```
 
-## 一键启动（M7）
+## 一键启动（M8 容器化）
 ```powershell
-# 1) 预置种子数据（100 家 passed 厂商 + 领域知识库 + 演示账号 + 双轨向量；幂等可重跑）
-cd backend
-..\.venv\Scripts\python.exe scripts\seed_data.py
-
-# 2) 一键拉起（基础设施 + 后端 + 买家端 + 管理后台）
+# 1) 配置密钥：复制 infra\.env.example → infra\.env，填写 LLM/Embedding Key
+# 2) 一键构建 + 拉起（PostgreSQL + Milvus + 后端 api + 前端 web，端口 80）
 .\start-all.ps1
+
+# 3) 预置种子数据（100 家 passed 厂商 + 领域知识库 + 演示账号 + 双轨向量；幂等可重跑）
+cd infra
+docker compose exec api python scripts/seed_data.py
 ```
 
 ## 演示账号（种子数据预置，passed）
@@ -29,7 +30,7 @@ cd backend
 | 厂商 | 18812345678 | vendor123 | http://localhost:5173（上传文档→AI 能力档案） |
 | 管理员 | 13800000000 | 123456 | http://localhost:5174（数据概览/需求/厂商/买家/日志） |
 
-## 手工启动（替代 start-all.ps1）
+## 本地开发模式（手动启动，替代容器化）
 - 基础设施：`cd infra && docker compose up -d`（PostgreSQL :5432 + Milvus :19530）
 - 后端：`cd backend && .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000`
 - 买家端：`cd frontend/apps/user-web && $env:VITE_USE_MOCK="false"; npm run dev`（:5173）
@@ -46,7 +47,7 @@ cd backend
 | M5 | 解释生成（异步 AI 评语/三组判定/查看原文） | ✅ |
 | M6 | 知识库与后台（知识管理/画像注入/审计/概览） | ✅ |
 | M7 | 联调与种子数据（100 家厂商/50 家匹配/性能/一键启动/收尾） | ✅ |
-| M8 | 部署容器化（补充：后端/前端镜像 + compose 全量一键，任务可扩展） | 🔧 |
+| M8 | 部署容器化（补充：后端/前端镜像 + compose 全量一键，任务可扩展） | ✅ |
 
 ## 文档索引
 - 产品：`doc/产品/`

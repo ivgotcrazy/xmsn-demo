@@ -62,6 +62,46 @@ def _render_chunks(chunks: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _extract_json(raw: str) -> dict:
+    """从 LLM 输出稳健提取 JSON 对象。
+
+    依次尝试：① 整体解析（纯 JSON）；② 去除 markdown 围栏后解析；
+    ③ 平衡括号截取首个 `{` 到其配对 `}`（容忍输出尾随文字/注释）。
+    均失败抛出 ValueError（调用方降级保留打分判定）。
+    """
+    s = raw.strip()
+    try:
+        return json.loads(s)
+    except Exception:
+        pass
+    s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.DOTALL)
+    s = re.sub(r"\s*```$", "", s, flags=re.DOTALL).strip()
+    start = s.find("{")
+    if start >= 0:
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(s)):
+            ch = s[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return json.loads(s[start:i + 1])
+    raise ValueError("未找到合法 JSON")
+
+
 async def generate(demand: dict, capability: dict, chunks: list[dict]) -> dict:
     """LLM 生成解释。失败/非法 → 返回空 params + None ai_comment（调用方降级保留打分判定）。"""
     try:
@@ -70,8 +110,8 @@ async def generate(demand: dict, capability: dict, chunks: list[dict]) -> dict:
             capability_json=json.dumps(capability, ensure_ascii=False),
             chunks=_render_chunks(chunks),
         )
-        raw = await chat([{"role": "user", "content": prompt}], temperature=0.2, max_tokens=600)
-        data = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group(0))
+        raw = await chat([{"role": "user", "content": prompt}], temperature=0.2, max_tokens=2048)
+        data = _extract_json(raw)
         params = []
         for p in data.get("params", []):
             if p.get("verdict") not in _VALID:

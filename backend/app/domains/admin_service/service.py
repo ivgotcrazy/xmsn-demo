@@ -172,7 +172,7 @@ async def list_buyers(db: AsyncSession, keyword: str | None, status: str | None,
         kw = f"%{keyword}%"
         filters.append(User.phone.ilike(kw) | (User.email.ilike(kw) if User.email else False))
     if status == "disabled":
-        filters.append(User.is_active.is_(False))
+        filters.append(User.status == "disabled")
 
     total = (await db.execute(select(func.count()).select_from(User).where(*filters))).scalar_one()
     users = list((await db.execute(
@@ -194,7 +194,7 @@ async def list_buyers(db: AsyncSession, keyword: str | None, status: str | None,
     items = [
         BuyerItem(
             user_id=str(u.user_id), phone=u.phone or "", email=getattr(u, "email", None),
-            status="disabled" if getattr(u, "is_active", True) is False else "active",
+            status="disabled" if u.status == "disabled" else "active",
             conversation_count=conv_counts.get(str(u.user_id), 0),
             request_count=req_counts.get(str(u.user_id), 0),
             last_active_at=u.updated_at,
