@@ -151,13 +151,17 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
         reply = AssistantMessage(content="请点击「完成需求描述」生成需求档案，或「确认并提交匹配」。", options=[])
         return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
 
-    # 选项精确命中 → 确定性直写；否则 LLM 解析
+    # 选项精确命中 → 确定性直写；否则 LLM 解析（完成态"继续补充"直接开放引导，跳过 LLM）
+    parsed = {"slot_delta": {}, "extra_constraints": []}
     if pending.get("key") and pending.get("options") and text.strip() in pending.get("options", []):
         key = pending["key"]
         val = text.strip()
         # 数值/枚举：multi 单选时按字符串直写（LLM 负责数值归一）
         state = agent.write_option(state, key, val)
-        slot_delta = {key: state[key]}
+        parsed = {"slot_delta": {key: state[key]}, "extra_constraints": []}
+    elif agent.is_continuation(text) and agent.completion_ready(state):
+        # 完成态下"还有/继续/继续补充"→ 直接进入开放引导（引向 extra_constraints）
+        pass
     else:
         # T6.2 画像注入：读用户画像（use_in_prompt 维度）→ Agent 引导不重复询问
         profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
@@ -166,12 +170,18 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
             meta={"conversation_id": conversation_id, "turn": turn, "user_profile": profile_ctx},
         )
         state = agent.merge_slot(state, parsed.get("slot_delta", {}), parsed.get("extra_constraints", []))
-        slot_delta = parsed.get("slot_delta", {})
+    slot_delta = parsed.get("slot_delta", {})
+    new_extras = parsed.get("extra_constraints", [])
 
-    # 追加历史
+    # 追加历史（回显：槽位变更 + 本轮新增扩展需求）
     history.append({"role": "user", "content": text})
-    if slot_delta:
-        history.append({"role": "assistant", "content": _delta_summary(slot_delta, state)})
+    summary = _delta_summary(slot_delta, state)
+    if new_extras:
+        if summary:
+            summary += "；"
+        summary += "扩展需求已记录：" + "、".join(new_extras)
+    if slot_delta or new_extras:
+        history.append({"role": "assistant", "content": summary})
 
     # 下一追问 / 完成提示
     next_key, question, opts = agent.decide_question(state)

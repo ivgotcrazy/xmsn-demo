@@ -39,8 +39,6 @@ const conversationId = ref("")
 const sending = ref(false)
 const loading = ref(true)
 const asideCollapsed = ref(false)
-// 原型明确化 §2：核心参数齐备后是否已提示"确认完成"
-const confirmPrompted = ref(false)
 // 02A 会话管理：左侧常驻会话列表 + 当前会话高亮
 const sessions = ref<ConversationListItem[]>([])
 const activeId = ref("")
@@ -152,7 +150,6 @@ async function openConversation(id: string): Promise<void> {
     options.value = last?.options ?? []
     demandPoints.value = res.demand_points ?? []
     version.value = res.version ?? null
-    confirmPrompted.value = res.confirm_prompted ?? false
     await loadRecords()
   } catch {
     messages.value = []
@@ -172,7 +169,6 @@ async function newSession(): Promise<void> {
     options.value = res.first_message.options ?? []
     demandPoints.value = res.demand_points ?? []
     version.value = null
-    confirmPrompted.value = false
     records.value = []
     activeId.value = res.conversation_id
     sessions.value.unshift({
@@ -219,16 +215,6 @@ async function send(text?: string): Promise<void> {
       const cur = sessions.value.find((s) => s.conversation_id === conversationId.value)
       if (cur) cur.title = res.title
     }
-    // 原型明确化 §2：核心参数（产品类型等）齐备后 Agent 主动提示确认完成
-    if (hasProductType() && !confirmPrompted.value) {
-      confirmPrompted.value = true
-      messages.value.push({
-        role: "assistant",
-        content: "核心需求已明确，确认完成？还是继续补充？",
-        created_at: new Date().toISOString(),
-      })
-      options.value = ["确认完成", "继续补充"]
-    }
   } catch {
     messages.value.push({ role: "assistant", content: "发送失败，请重试", error: true })
   } finally {
@@ -244,6 +230,7 @@ function pick(opt: string): void {
   }
   if (opt === "继续补充") {
     options.value = []
+    void send("继续补充") // 通知后端进入"补充模式"，完成态下回开放引导（不再重复 confirm）
     return
   }
   input.value = opt

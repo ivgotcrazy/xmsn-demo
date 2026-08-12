@@ -83,7 +83,8 @@ def _match_param(j: dict) -> MatchParam:
         key=j["param"],
         label=req_schema.label_of(j["param"], None),
         value=value,
-        verdict=j["verdict"],
+        # missing（厂商未声明）语义并入 partial（需协商）；解释内部枚举 4 值，契约 3 值归一
+        verdict="partial" if j.get("verdict") == "missing" else j["verdict"],
         source_doc_id=src.get("doc_id"),
         source_doc_name=src.get("doc_name"),
         source_page=src.get("page"),

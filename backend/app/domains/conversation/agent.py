@@ -46,6 +46,19 @@ EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在�
 {message}
 """
 
+# 完成态 confirm / 开放引导文案（继续补充去重 + 开放引导）
+CONFIRM_TEXT = "核心需求已明确，确认完成？还是继续补充？"
+OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「确认完成」结束。"
+
+# 继续补充的短填充语（完成态下直接开放引导，跳过 LLM）
+_CONTINUATION = ("还有", "继续", "还要", "补充", "其他", "别的", "再来")
+
+
+def is_continuation(text: str) -> bool:
+    """是否"想继续补充"的短填充语 → 完成态下直接开放引导（省一次 LLM 调用）。"""
+    t = text.strip()
+    return 0 < len(t) <= 8 and any(w in t for w in _CONTINUATION)
+
 
 def route_intent(message: str | None, clicked_option: str | None, state: dict) -> str:
     """意图分类（LLD 2.2）：option_click / confirm / done / help / free_text。"""
@@ -217,10 +230,14 @@ def decide_question(state: dict) -> tuple[str | None, list[str]]:
         f = req_schema.FIXED_FIELDS[0]  # product_type
         return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options", []))
     if completion_ready(state):
-        return None, "核心需求已明确，确认完成？还是继续补充？", ["确认完成", "继续补充"]
+        # 仅首次提示确认；再次进入完成态 → 开放引导（不再重复 confirm）
+        if state.get("_confirm_prompted"):
+            return None, OPEN_GUIDE_TEXT, ["确认完成"]
+        state["_confirm_prompted"] = True
+        return None, CONFIRM_TEXT, ["确认完成", "继续补充"]
     nf = req_schema.next_unfilled(state, pt)
     if not nf:
-        return None, "核心需求已明确，确认完成？还是继续补充？", ["确认完成", "继续补充"]
+        return None, OPEN_GUIDE_TEXT, ["确认完成"]
     opts = list(nf.get("options", []))
     question = f"请问您需要哪些{nf['label']}？" if nf["kind"] == "multi" else f"请填写{nf['label']}："
     return nf["key"], question, opts

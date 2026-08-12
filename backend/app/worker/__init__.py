@@ -63,8 +63,16 @@ async def _explain_match(match_id: str) -> None:
             logger.info("explain empty for %s (保留打分判定)", match_id)
             return
         matched = [p for p in result["params"] if p["verdict"] == "matched"]
-        partial = [p for p in result["params"] if p["verdict"] in ("partial", "missing")]
-        unmatched = [p for p in result["params"] if p["verdict"] == "unmatched"]
+        partial = []
+        unmatched = []
+        for p in result["params"]:
+            if p["verdict"] == "matched":
+                matched.append(p)
+            elif p["verdict"] in ("partial", "missing"):
+                # missing（厂商未声明）语义并入 partial（需协商）；契约 MatchParam 仅 3 值
+                partial.append({**p, "verdict": "partial"})
+            elif p["verdict"] == "unmatched":
+                unmatched.append(p)
         mr.matched_params = matched
         mr.partial_params = partial
         mr.unmatched_params = unmatched
