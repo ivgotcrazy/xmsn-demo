@@ -144,8 +144,65 @@ def _bump_stall(state: dict, progress: bool) -> None:
         state["_stall_counter"] = state.get("_stall_counter", 0) + 1
 
 
+async def _non_extract_message(
+    db: AsyncSession, conv: Conversation, state: dict, history: list,
+    turn: int, text: str, intent: str, reply_text: str,
+) -> MessageResponse:
+    """路径A 非填槽轮分流：按推理节点结构化 intent 处理（QA/引导/弱收尾/推荐）。
+
+    B/C 合规后置保险：原文强命中厂商/结果/闲聊 → 强制引导话术（防模型越界评价厂商）。
+    """
+    override = agent.guide_override_for(text)
+    if override == "guide_result" and intent != "recommend":
+        intent = "guide_result"          # 强命中厂商/结果 → 强制引导
+    elif override == "guide_back":
+        intent = "guide_back"
+
+    if intent == "guide_result":
+        content = agent.guide_to_results(_title_of(state))
+        evt, opts = "redirect", []
+    elif intent == "guide_back":
+        content = agent.guide_back(_title_of(state))
+        evt, opts = "guard", []
+    elif intent == "weak_close":
+        content = agent.weak_close_recap(state)
+        opts = ["确认并提交匹配", "继续补充"]
+        state["_pending"] = {"key": None, "options": opts}
+        evt = "recap"
+    elif intent == "recommend":
+        profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
+        rec = agent.build_recommendation(state, profile_ctx)
+        if not rec:
+            _nk, content, opts = agent.decide_question(state)
+            state["_pending"] = {"key": _nk, "options": opts} if _nk else {}
+            evt = "question"
+        else:
+            state["_recommend"] = {"key": rec["key"], "value": rec["value"]}
+            val_s = agent._fmt_val(rec["value"])
+            content = f"看您拿不定主意，我建议：{rec['label']}选「{val_s}」（{rec['reason']}）。要我按此填写吗？"
+            opts = ["按建议填写", "我自己定"] + ([] if rec["key"] == "product_type" else ["跳过"])
+            state["_pending"] = {"key": None, "options": opts}
+            evt = "recommend"
+    else:  # qa / empty
+        content = reply_text or "好的，请继续补充您的需求。"
+        opts = []
+        evt = "qa_answer" if intent == "qa" else "question"
+        _bump_stall(state, False)
+
+    history.append({"role": "user", "content": text})
+    history.append({"role": "assistant", "content": content, "options": opts})
+    conv.current_slots = state
+    conv.conversation_history = history
+    await db.commit()
+    await _append_event(db, str(conv.conversation_id), evt, {"turn": turn, "content": text[:300]})
+    return MessageResponse(
+        assistant_message=AssistantMessage(content=content, options=opts),
+        demand_points=to_demand_points(state), title=conv.title,
+    )
+
+
 async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageResponse:
-    """对话轮次（代理详细设计 v2 8 章）：意图路由 → 强指令/引导/弱收尾/推理节点 → 合并修剪 → 完成判定 → 追问。"""
+    """对话轮次（代理详细设计 v2 8 章）：意图路由 → 强命令/帮助/推荐直写/推理节点 → 合并修剪 → 完成判定 → 追问。"""
     conv = await _load_conv(db, conversation_id)
     state: dict = dict(conv.current_slots or {})
     history: list = list(conv.conversation_history or [])
@@ -180,67 +237,18 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
                                demand_points=to_demand_points(state), title=conv.title,
                                submitted=True, redirect_to=f"/buyer/matches/{req.request_id}", warnings=warnings)
 
-    # ② 帮助 / 引导（B/C 快通道：零 LLM）
-    if intent in ("help", "guide_result", "guide_back"):
-        if intent == "help":
-            content = agent.help_text()
-            evt = "guide"
-        elif intent == "guide_result":
-            content = agent.guide_to_results(_title_of(state))
-            evt = "redirect"
-        else:
-            content = agent.guide_back(_title_of(state))
-            evt = "guard"
+    # ② 帮助（确定性命令）
+    if intent == "help":
+        content = agent.help_text()
         reply = AssistantMessage(content=content, options=[])
         history.append({"role": "user", "content": text})
         history.append({"role": "assistant", "content": content, "options": reply.options})
         conv.conversation_history = history
         await db.commit()
-        await _append_event(db, conversation_id, evt, {"turn": turn, "content": text[:300]})
+        await _append_event(db, conversation_id, "guide", {"turn": turn, "content": text[:300]})
         return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
 
-    # ③ 弱收尾 → 复述 + 引导确认（SC-22b，不直接提交）
-    if intent == "weak_close":
-        recap = agent.weak_close_recap(state)
-        reply = AssistantMessage(content=recap, options=["确认并提交匹配", "继续补充"])
-        history.append({"role": "user", "content": text})
-        history.append({"role": "assistant", "content": recap, "options": reply.options})
-        state["_pending"] = {"key": None, "options": ["确认并提交匹配", "继续补充"]}
-        conv.current_slots = state
-        conv.conversation_history = history
-        await db.commit()
-        await _append_event(db, conversation_id, "recap", {"turn": turn})
-        return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
-
-    # ③' SC-05 顾问反推：拿不定主意 → 建议值 + 用户确认（grounded，不替用户决定）
-    if intent == "recommend":
-        profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
-        rec = agent.build_recommendation(state, profile_ctx)
-        if not rec:
-            _nk, _q, _o = agent.decide_question(state)
-            reply = AssistantMessage(content=_q, options=_o)
-            history.append({"role": "user", "content": text})
-            history.append({"role": "assistant", "content": _q, "options": _o})
-            state["_pending"] = {"key": _nk, "options": _o} if _nk else {}
-            conv.current_slots = state
-            conv.conversation_history = history
-            await db.commit()
-            return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
-        state["_recommend"] = {"key": rec["key"], "value": rec["value"]}
-        val_s = agent._fmt_val(rec["value"])
-        content = f"看您拿不定主意，我建议：{rec['label']}选「{val_s}」（{rec['reason']}）。要我按此填写吗？"
-        opts = ["按建议填写", "我自己定"] + ([] if rec["key"] == "product_type" else ["跳过"])
-        reply = AssistantMessage(content=content, options=opts)
-        history.append({"role": "user", "content": text})
-        history.append({"role": "assistant", "content": content, "options": opts})
-        state["_pending"] = {"key": None, "options": opts}
-        conv.current_slots = state
-        conv.conversation_history = history
-        await db.commit()
-        await _append_event(db, conversation_id, "recommend", {"turn": turn, "key": rec["key"]})
-        return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
-
-    # ③'' SC-05 拒绝建议 → 清空 _recommend，正常追问
+    # ③ SC-05 拒绝建议 → 清空 _recommend，正常追问
     if intent == "decline_recommend":
         state.pop("_recommend", None)
         _nk, _q, _o = agent.decide_question(state)
@@ -291,26 +299,10 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
         rr_reply = rr["reply_text"].strip()
         state = agent.merge_slot(state, rr["slot_delta"], rr["extra_constraints"])
         parsed = {"slot_delta": rr["slot_delta"], "extra_constraints": rr["extra_constraints"]}
-        # 无槽位但 LLM 有正文（答疑/引导兜底）→ 直接应答，本轮结束
-        if not rr["slot_delta"] and rr_reply:
-            override = agent.guide_override_for(text)
-            if override:
-                reply_content = (agent.guide_to_results(_title_of(state)) if override == "guide_result"
-                                 else agent.guide_back(_title_of(state)))
-                evt = "redirect" if override == "guide_result" else "guard"
-            else:
-                reply_content = rr_reply[:300]
-                evt = "qa_answer"
-            _bump_stall(state, False)
-            history.append({"role": "user", "content": text})
-            history.append({"role": "assistant", "content": reply_content, "options": []})
-            state["_pending"] = {}
-            conv.current_slots = state
-            conv.conversation_history = history
-            await db.commit()
-            await _append_event(db, conversation_id, evt, {"turn": turn, "content": text[:300]})
-            return MessageResponse(assistant_message=AssistantMessage(content=reply_content, options=[]),
-                                   demand_points=to_demand_points(state), title=conv.title)
+        # 路径A：非填槽轮 → 按推理节点结构化 intent 分流（QA/引导/弱收尾/推荐），本轮结束
+        if rr.get("intent", "extract") != "extract":
+            return await _non_extract_message(
+                db, conv, state, history, turn, text, rr.get("intent", "empty"), rr_reply)
         progress = bool(rr["slot_delta"] or rr["extra_constraints"])
 
     slot_delta = parsed.get("slot_delta", {})

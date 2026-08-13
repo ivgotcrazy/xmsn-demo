@@ -1,7 +1,10 @@
 """对话 Agent 核心（代理详细设计 v2 8/9 章）：意图路由 / 推理节点(Tool Calling) / 合并与修剪 / 完成判定 / 追问。
 
-- 意图路由 route_intent：仅强指令拦截 + 纯引导模板（B/C 快通道）；自由文本一律进推理节点
-- 推理节点 agent_reasoning：一次推断 reply_text + tool_call(slot_delta/extra) + intent（Tool Calling）
+路径A（评审确认 2026-08-13）：意图 = f(话语, 状态, 历史, 阶段)。
+- 意图路由 route_intent：确定性层**只拦无歧义命令**（option_click/confirm/help/accept·decline·skip_recommend[状态条件]）
+- 弱收尾/引导(B·C)/推荐(SC-05)/答疑 → 推理节点在完整上下文中判定（classify_turn 结构化 intent）
+- 推理节点 agent_reasoning：双工具（update_requirement_slots + classify_turn）一次推断 reply_text + slot_delta + intent
+- B/C 合规后置保险 guide_override_for（正文强制引导，不参与主路由）
 - reconcile 状态修剪（依赖/级联清理）+ 动态 Validator（hard/soft/optional）+ pending_slots 追问
 - 熔断 _stall_counter：连续无进展换方式/引导人工
 """
@@ -55,13 +58,8 @@ _CONTINUATION = ("还有", "继续", "还要", "补充", "其他", "别的", "�
 
 # 强命令（明确授权直接提交，SC-22）
 CONFIRM_COMMANDS = ("确认并提交匹配", "确认并提交", "提交匹配", "提交需求", "完成需求", "确认完成")
-# 弱收尾（SC-22b：复述+引导确认，不直接提交）
-WEAK_CLOSE_PAT = ("就这样", "差不多了", "可以了", "没别的了", "就这些", "行了", "结束吧")
-# 纯引导短句（看结果 / 推荐厂商 → 引导去匹配详情）
-GUIDE_RESULT_PAT = ("看结果", "结果呢", "匹配结果", "推荐几个", "推荐一下", "有哪些厂商", "能匹配吗", "结果怎么样")
-GUIDE_BACK_PAT = ("谢谢", "再见", "拜拜", "辛苦了", "好的", "知道了")
 
-# B/C 档规则快通道（厂商比较/闲聊）：正则命中即引导（SC-29/34/35）
+# B/C 档合规安全覆盖模式（后置保险，不参与主路由；SC-29/34/35）
 _REDIRECT_PAT = re.compile(
     r"哪家|谁(更好|合适|能|比)|更好|更合适|对比|比一下|比较|"
     r"推荐.{0,6}(厂商|厂家|家)|这家|那家|A厂|B厂|上面.{0,4}(厂|家)|"
@@ -69,12 +67,10 @@ _REDIRECT_PAT = re.compile(
 _OFFTOPIC_PAT = re.compile(
     r"^(你好|您好|在吗|在不在|你是(谁|什么)|今天天气|你会做|你能做|介绍一下你|"
     r"讲个笑话|什么是物联网|人工智能趋势)", re.I)
+# 明确"看结果"信号（结果查看 → 引导，合规兜底）
+_RESULT_VIEW_PAT = ("看结果", "匹配结果", "结果呢", "结果怎么样", "查结果")
 
-# 短消息守卫：弱收尾/引导/B-C 仅在纯短语短消息拦截（防"就这样吧，接口加个USB"被吞）
-SHORT_GUARD = 12
-
-# SC-05 顾问反推：用户在萃取字段上拿不定主意 → 给建议值（grounded，用户确认后直写，不替用户决定）
-_UNSURE_PAT = ("不确定", "不知道", "你看着办", "你推荐", "推荐一下", "随便", "听你的", "你建议", "帮我选", "拿不定", "都行", "选什么")
+# SC-05 顾问反推：采纳/拒绝/跳过建议（仅 _recommend 存在时的状态条件命令）
 ACCEPT_RECOMMEND_PAT = ("按建议", "采纳", "按推荐", "就按你说的", "按你说的", "按这个")
 # 行业默认配置（无画像/知识时给 grounded 建议值；L2 SC-05）
 _CATEGORY_DEFAULTS: dict[str, dict] = {
@@ -97,10 +93,10 @@ def is_continuation(text: str) -> bool:
 
 
 def route_intent(message: str | None, clicked_option: str | None, state: dict) -> str:
-    """意图路由（代理详细设计 v2 8.2 ②）：仅强指令拦截 + 纯引导模板；自由文本一律进推理节点。
+    """意图路由（路径A，评审确认 2026-08-13）：只拦**无歧义命令**；弱收尾/引导(B·C)/推荐(SC-05)/答疑
+    由推理节点在完整上下文中判定（intent 结构化输出）。
 
-    返回：option_click / confirm_command / help / weak_close / guide_result / guide_back /
-          recommend / accept_recommend / decline_recommend / skip_current / free_text
+    返回：option_click / confirm_command / help / accept_recommend / decline_recommend / skip_current / free_text
     """
     if clicked_option:
         return "option_click"
@@ -114,21 +110,7 @@ def route_intent(message: str | None, clicked_option: str | None, state: dict) -
         return "confirm_command"
     if m in ("帮助", "help", "?") or m.startswith("/help"):
         return "help"
-    if len(m) <= SHORT_GUARD:
-        # 短消息守卫：先判引导/厂商/弱收尾，再 SC-05 推荐（"你推荐几个厂商"应走引导而非推荐）
-        if _REDIRECT_PAT.search(m) or any(w in m for w in GUIDE_RESULT_PAT):
-            return "guide_result"          # 厂商/结果 → 引导看详情
-        if _OFFTOPIC_PAT.match(m) or any(w in m for w in GUIDE_BACK_PAT):
-            return "guide_back"            # 闲聊/无关 → 守门拉回
-        if any(w in m for w in WEAK_CLOSE_PAT):
-            return "weak_close"            # 弱收尾 → 复述+引导确认（不直接提交）
-        return _recommend_intent(m, state) or "free_text"
-    # 长消息：SC-05 推荐/接受（可长句），其余放行推理节点（混合意图一次处理）
-    return _recommend_intent(m, state) or "free_text"
-
-
-def _recommend_intent(m: str, state: dict) -> str | None:
-    """SC-05 推荐相关意图：accept/decline/skip（需已有 _recommend）或 recommend（拿不定主意）。"""
+    # 采纳/拒绝/跳过建议（仅 _recommend 存在时的状态条件命令，无歧义）
     if state.get("_recommend"):
         if any(w in m for w in ACCEPT_RECOMMEND_PAT):
             return "accept_recommend"
@@ -136,16 +118,15 @@ def _recommend_intent(m: str, state: dict) -> str | None:
             return "decline_recommend"
         if m in ("跳过", "先不填", "不限"):
             return "skip_current"
-    if any(w in m for w in _UNSURE_PAT):
-        return "recommend"
-    return None
+    # 其余一律 free_text → 推理节点（语义由上下文中判定，不按关键词分流）
+    return "free_text"
 
 
 def guide_override_for(text: str) -> str | None:
-    """推理节点后置兜底：长消息漏网命中 B/C → 返回 guide_result/guide_back（正文用引导话术，槽位仍可落）。"""
-    if _REDIRECT_PAT.search(text) or any(w in text for w in GUIDE_RESULT_PAT):
+    """B/C 合规后置保险（不参与主路由）：原文强命中厂商/结果/闲聊 → 强制引导，防模型越界评价厂商。"""
+    if _REDIRECT_PAT.search(text) or any(w in text for w in _RESULT_VIEW_PAT):
         return "guide_result"
-    if _OFFTOPIC_PAT.match(text) or any(w in text for w in GUIDE_BACK_PAT):
+    if _OFFTOPIC_PAT.match(text):
         return "guide_back"
     return None
 
@@ -389,6 +370,40 @@ def decide_question(state: dict) -> tuple[str | None, str, list[str]]:
 
 # ---- 代理详细设计 v2 8/9：推理节点 / 状态修剪 / 引导模板 ----
 
+_MD_PAT = re.compile(r"(\*\*|__|`|#{1,6}\s*|^\s*\d+[\.、]|\* |\- )", re.M)
+
+
+def _clean_text(s: str, limit: int = 150) -> str:
+    """文本卫生：去 markdown 标记、折叠空白、限长（答疑/引导/建议正文统一用）。"""
+    if not s:
+        return ""
+    t = _MD_PAT.sub("", s)
+    t = " ".join(t.split()).strip()
+    return t[:limit]
+
+
+# 非填槽轮意图分类工具（路径A：语义判定下沉推理节点）
+CLASSIFY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "classify_turn",
+        "description": "当用户本轮**没有给出可写入的需求槽位信息**，而是：领域答疑(qa)、询问厂商/匹配结果(guide_result)、"
+                       "闲聊/无关(guide_back)、要收尾(weak_close)、拿不定主意要推荐(recommend) 时调用，给出意图与一句话回复。"
+                       "若用户在填槽（给了明确槽位值）——即使同时有收尾/闲聊成分（如「就这样吧，接口加个USB」），"
+                       "也请调用 update_requirement_slots，不要调用本工具。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intent": {"type": "string",
+                           "enum": ["qa", "guide_result", "guide_back", "weak_close", "recommend"]},
+                "reply_text": {"type": "string",
+                               "description": "给用户的一句话回复（答疑/引导/复述/建议，限150字，勿用markdown标记）"},
+            },
+            "required": ["intent", "reply_text"],
+        },
+    },
+}
+
 
 def build_tool_schema(active_fields: list[dict]) -> dict:
     """allowed_set → update_requirement_slots 的 tool JSON Schema（设计 9.4 + __states__ 三态）。"""
@@ -447,7 +462,8 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
     """推理节点（④）：一次推断 reply_text + tool_call(slot_delta/extra) + intent（Tool Calling）。
 
     返回 {reply_text, slot_delta, extra_constraints, intent, has_tool}；
-    intent: extract（有槽位）/ qa_or_guide（仅正文）/ empty（异常/空）。
+    intent: extract（有槽位）/ qa·guide_result·guide_back·weak_close·recommend（classify_turn 结构化判定）/
+           empty（异常/空）。reply_text 已去 markdown 并限长。
     """
     import time as _time
     from app.core.config import settings as _settings
@@ -480,15 +496,15 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         f"本轮建议追问维度：{next_hint}（你可围绕它自然提问；若用户已提供其他合法槽位也可顺带写入）\n"
         "# 当前可填槽位（allowed_set）\n" + _allowed_lines(active) + "\n"
         "# 当前已填槽位（三态）\n" + _render_slots(state) + "\n"
-        "# 规则\n"
-        "1. 用户明确提到的槽位写入工具参数 update_requirement_slots；未提到的不写。\n"
-        "2. 纠正（改成X/不对，是X）→ 该槽位只写新值（覆盖）。\n"
-        "3. 排除（不要X）→ 值写该槽位 + __states__ 标记 {'<key>':'excluded'}；不限/跳过 → __states__ 标记 wildcard。\n"
-        "4. 自创字段（如'外壳黑色'）→ 归入 extra_constraints。\n"
-        "5. 若用户只问领域知识（与本轮需求决策相关，如 Linux 与 Android 区别）→ 不调工具，正文简短回答（≤3~5句）；"
-        "若基于行业背景知识作答，末尾注明「依据：…」来源；并引导回槽位。\n"
-        "6. 若用户询问厂商比较/评价或与需求无关 → 不调工具，正文用引导话术（不评价厂商、不闲聊开走）。\n"
-        "7. 无论是否调用工具，正文都给出一句简短自然回应（回执/引导/答疑）。\n"
+        "# 工具选择规则\n"
+        "A. 用户本轮给出了明确槽位信息（含补充/纠正/排除/不限）→ 调用 update_requirement_slots 写入；可在正文给简短回执。\n"
+        "B. 用户本轮没有槽位信息，而是：\n"
+        "   - 领域知识提问（Linux与Android区别等）→ classify_turn(intent=qa)，正文≤3~5句、可注明「依据：…」、末尾引导回槽位；\n"
+        "   - 询问厂商比较/推荐厂商/查匹配结果 → classify_turn(intent=guide_result)，正文不评价厂商；\n"
+        "   - 闲聊/与需求无关 → classify_turn(intent=guide_back)，正文礼貌拉回；\n"
+        "   - 表示收尾（就这样吧/差不多了）→ classify_turn(intent=weak_close)；\n"
+        "   - 拿不定主意要推荐（你推荐/随便/不知道选什么）→ classify_turn(intent=recommend)，正文说明想推荐的方向。\n"
+        "C. 无论是否调用工具，都要在正文（reply_text 或 content）给出一句简短自然回应，勿用 markdown 标记。\n"
         + (knowledge or "") + "\n"
         + ("# 当前用户画像\n" + ((meta or {}).get("user_profile") or "（无）") + "\n")
     )
@@ -501,7 +517,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         res = await chat_tool(
             [{"role": "system", "content": sys_prompt},
              {"role": "user", "content": message[:2000]}],
-            [tool], tool_choice="auto", temperature=0.1, max_tokens=1024,
+            [tool, CLASSIFY_TOOL], tool_choice="auto", temperature=0.1, max_tokens=1024,
         )
         raw_content = res.content
         raw_tool_calls = res.tool_calls
@@ -513,13 +529,24 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
     slot_delta: dict = {}
     extra: list[str] = []
     has_tool = False
+    classify_intent: str | None = None
+    classify_reply = ""
     allowed_keys = {f["key"] for f in active} | {"product_type"}
     kinds = {f["key"]: f.get("kind") for f in active}
     for tc in raw_tool_calls:
-        if tc["name"] != "update_requirement_slots":
+        name = tc["name"]
+        args = tc["arguments"] or {}
+        if name == "classify_turn":
+            ci = args.get("intent")
+            if ci in ("qa", "guide_result", "guide_back", "weak_close", "recommend"):
+                classify_intent = ci
+            cr = args.get("reply_text")
+            if isinstance(cr, str) and cr.strip():
+                classify_reply = cr.strip()
+            continue
+        if name != "update_requirement_slots":
             continue
         has_tool = True
-        args = tc["arguments"] or {}
         states = args.get("__states__") or {}
         for k, v in args.items():
             if k == "__states__":
@@ -546,15 +573,20 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
                 slot_delta[k] = {"value": None, "state": SlotTriState.WILDCARD.value}
             else:
                 slot_delta[k] = {"value": v, "state": SlotTriState.SET.value}
-        break  # 只处理首个合法工具调用
     extra = list(dict.fromkeys(extra))
 
+    # 意图判定（路径A）：填槽 > 结构化分类 > 兜底
     if slot_delta:
         intent = "extract"
+    elif classify_intent:
+        intent = classify_intent
     elif raw_content.strip():
-        intent = "qa_or_guide"
+        intent = "qa"
     else:
         intent = "empty"
+
+    # 正文卫生：优先 classify_turn 的 reply_text，其次模型 content
+    reply_text = _clean_text(classify_reply or raw_content)
 
     if db is not None:
         try:
@@ -562,7 +594,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
                 conversation_id=(meta or {}).get("conversation_id"),
                 turn=(meta or {}).get("turn"),
                 task="agent_reasoning",
-                input_full={"prompt": sys_prompt, "tools": tool},
+                input_full={"prompt": sys_prompt, "tools": [tool, CLASSIFY_TOOL]},
                 output_raw={"content": raw_content[:2000], "tool_calls": raw_tool_calls[:5]},
                 model=_settings.deepseek_model,
                 latency_ms=int((_time.perf_counter() - t0) * 1000),
@@ -573,8 +605,8 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm_call_log write failed: %s", exc)
 
-    return {"reply_text": raw_content, "slot_delta": slot_delta,
-            "extra_constraints": extra, "intent": intent, "has_tool": has_tool}
+    return {"intent": intent, "reply_text": reply_text, "slot_delta": slot_delta,
+            "extra_constraints": extra, "has_tool": has_tool}
 
 
 def reconcile(state: dict) -> dict:
