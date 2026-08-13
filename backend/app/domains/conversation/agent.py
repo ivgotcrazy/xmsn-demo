@@ -505,6 +505,8 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         "   - 表示收尾（就这样吧/差不多了）→ classify_turn(intent=weak_close)；\n"
         "   - 拿不定主意要推荐（你推荐/随便/不知道选什么）→ classify_turn(intent=recommend)，正文说明想推荐的方向。\n"
         "C. 无论是否调用工具，都要在正文（reply_text 或 content）给出一句简短自然回应，勿用 markdown 标记。\n"
+        "D. 若用户**同时**给出槽位信息和提问/推荐请求（如「放在家庭中使用，你推荐什么工艺？」）→ "
+        "可同时调用 update_requirement_slots（写入槽位，如 application_scenario=家庭）和 classify_turn（回答问题）。\n"
         + (knowledge or "") + "\n"
         + ("# 当前用户画像\n" + ((meta or {}).get("user_profile") or "（无）") + "\n")
     )

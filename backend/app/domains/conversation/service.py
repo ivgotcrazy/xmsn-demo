@@ -173,9 +173,14 @@ async def _non_extract_message(
         profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
         rec = agent.build_recommendation(state, profile_ctx)
         if not rec:
-            _nk, content, opts = agent.decide_question(state)
-            state["_pending"] = {"key": _nk, "options": opts} if _nk else {}
-            evt = "question"
+            # 无待填维度可给结构化建议（完成态/数字字段无默认/画像无值）→
+            # 直接用模型已生成的自然语言建议 reply_text，勿丢弃；真无内容才算空轮计熔断
+            content = reply_text or "好的，请继续补充您的需求。"
+            opts = []
+            state["_pending"] = {}
+            evt = "recommend" if reply_text else "question"
+            if not reply_text:
+                _bump_stall(state, False)
         else:
             state["_recommend"] = {"key": rec["key"], "value": rec["value"]}
             val_s = agent._fmt_val(rec["value"])
