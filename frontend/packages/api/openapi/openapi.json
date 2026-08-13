@@ -2744,6 +2744,14 @@
             "type": "string",
             "title": "Redirect To",
             "default": ""
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "硬约束缺项警示（SC-25，允许提交但显著提示）"
           }
         },
         "type": "object",
@@ -3649,6 +3657,23 @@
             "type": "string",
             "title": "Title",
             "default": "新会话"
+          },
+          "submitted": {
+            "type": "boolean",
+            "title": "Submitted",
+            "default": false
+          },
+          "redirect_to": {
+            "type": "string",
+            "title": "Redirect To",
+            "default": ""
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
           }
         },
         "type": "object",
@@ -3656,7 +3681,7 @@
           "assistant_message"
         ],
         "title": "MessageResponse",
-        "description": "SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。\ndemand_points 为当前完整需求点集合（全量返回，前端整体替换）。\ntitle 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。"
+        "description": "对话轮次最终聚合形状（代理详细设计 v2）。\ndemand_points 为当前完整需求点集合（全量返回，前端整体替换）。\ntitle 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。\nsubmitted/redirect_to/warnings：强命令在聊天内直接提交时返回（SC-22/25），前端据此跳转并展示警示。"
       },
       "RegisterRequest": {
         "properties": {

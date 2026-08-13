@@ -210,6 +210,16 @@ async function send(text?: string): Promise<void> {
     options.value = res.assistant_message.options ?? []
     // 前端「当前需求」：全量替换为萃取出的需求点集合
     demandPoints.value = res.demand_points ?? []
+    // 强命令在聊天内直接提交（SC-22/25）：展示警示并跳转匹配结果页
+    if (res.submitted && res.redirect_to) {
+      if (res.warnings?.length) {
+        res.warnings.forEach((w) => message.warning(w))
+      } else {
+        message.success("已提交匹配")
+      }
+      void router.push(res.redirect_to)
+      return
+    }
     // 一会话一产品：萃取到产品类型后，会话卡标题联动更新（新会话「新会话」→ 产品名）
     if (res.title) {
       const cur = sessions.value.find((s) => s.conversation_id === conversationId.value)
@@ -223,8 +233,8 @@ async function send(text?: string): Promise<void> {
 }
 
 function pick(opt: string): void {
-  // "确认完成"直接提交匹配（右侧按钮随时可提交）；"继续补充"继续对话
-  if (opt === "确认完成") {
+  // "确认并提交匹配"直接提交（右侧按钮随时可提交）；"继续补充"继续对话
+  if (opt === "确认并提交匹配") {
     void confirm()
     return
   }
@@ -248,7 +258,12 @@ async function confirm(): Promise<void> {
       conversation_id: conversationId.value,
       demand_points: demandPoints.value,
     })
-    message.success("已提交匹配")
+    // SC-25：硬约束缺项 → 显著警示（不静默）；否则成功提示
+    if (res.warnings?.length) {
+      res.warnings.forEach((w) => message.warning(w))
+    } else {
+      message.success("已提交匹配")
+    }
     // 02A 匹配记录：不跳页，刷新匹配记录并首次自动弹出结果
     await loadRecords()
     // 提交后进入该次匹配的结果页（返回回会话页）
@@ -277,10 +292,12 @@ function openRecord(requestId: string): void {
   void router.push(`/buyer/matches/${requestId}`)
 }
 
-/** 匹配记录卡片标题：优先显示匹配产品类型。 */
+/** 匹配记录卡片标题：优先显示匹配产品类型（三态快照 {value,state} 取值）。 */
 function recordTitle(r: RequestSnapshot): string {
-  const pt = (r.structured_demand as Record<string, unknown> | undefined)?.product_type
-  return pt ? String(pt) : "需求匹配"
+  const sd = (r.structured_demand as Record<string, any> | undefined) ?? {}
+  const pt = sd.product_type
+  const val = typeof pt === "object" && pt !== null ? pt.value : pt
+  return val ? String(val) : "需求匹配"
 }
 
 /** 逻辑删除会话（deleted_at 标记，数据保留）：确认后从列表移除；若删除当前会话，切换到剩余首个。 */

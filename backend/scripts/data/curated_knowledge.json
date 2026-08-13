@@ -1,0 +1,79 @@
+{
+  "_meta": {
+    "version": 1,
+    "note": "精选行业知识（curated）：覆盖萃取答疑(SC-17~20)/推荐依据(SC-05)/别名归一(SC-15)/认证合规(FAQ)；每条带 source 供可溯源。category 沿用 dependency/terminology/trap/faq 分类。",
+    "count": 10
+  },
+  "knowledge": [
+    {
+      "content": "机顶盒电视制式差异：DVB-C 是有线数字电视（同轴电缆），DVB-T 是地面数字电视（天线接收），欧洲与东南亚按市场使用；出货前需确认目标市场的制式与频段。",
+      "category": "terminology",
+      "industry": "机顶盒",
+      "usage": "domain_qa",
+      "source": "行业常识（DVB 标准）"
+    },
+    {
+      "content": "Linux 与 Android 机顶盒取舍：Linux 启动快、资源占用低、适合单一应用与运营商深度定制；Android 应用生态完整、UI 灵活，适合零售与流媒体场景。",
+      "category": "terminology",
+      "industry": "机顶盒",
+      "usage": "domain_qa",
+      "source": "行业常识"
+    },
+    {
+      "content": "机顶盒起订量与交期常见梯度：成熟 ODM 方案一般 1000~3000 台起，新开模/深度定制常需 5000 台以上；交期受 SMT 排期与老化测试影响，通常 20~45 天。",
+      "category": "dependency",
+      "industry": "机顶盒",
+      "usage": "recommend",
+      "source": "行业常识（ODM 报价惯例）"
+    },
+    {
+      "content": "麦克风阵列形态与拾音：线性 4 麦适合桌面近场，环形 4~6 麦适合客厅 360° 远场拾音；环形阵列对结构设计与波束成形算法要求更高。",
+      "category": "terminology",
+      "industry": "智能音箱",
+      "usage": "domain_qa",
+      "source": "行业常识（声学方案）"
+    },
+    {
+      "content": "智能音箱语音助手上云：自研助手需对接国内 ASR/TTS 平台（如讯飞、百度），接入第三方助手（小爱/天猫精灵）需通过其生态认证，交期与成本更高。",
+      "category": "dependency",
+      "industry": "智能音箱",
+      "usage": "domain_qa",
+      "source": "行业常识"
+    },
+    {
+      "content": "智能音箱整机无线认证三市场并行：出口美国需 FCC（带 WiFi/蓝牙做 FCC ID 模块认证），欧盟 CE-RED，中国 SRRC；三市场通常需分别满足。",
+      "category": "faq",
+      "industry": "智能音箱",
+      "usage": "domain_qa",
+      "source": "行业常识（认证法规）"
+    },
+    {
+      "content": "电池供电 IoT 设备设计要点：低功耗 MCU + 深度休眠 + 定时上报，待机电流需做到 µA 级，电池寿命常按 2~3 年设计；功耗测试是整机验收关键项。",
+      "category": "trap",
+      "industry": "IoT设备",
+      "usage": "domain_qa",
+      "source": "行业常识（低功耗设计）"
+    },
+    {
+      "content": "工业物联网组网选型：设备多、数据频次高选 LoRa/4G 汇聚；低功耗传感器选 BLE Mesh；野外与表计场景选运营商覆盖的 NB-IoT；室内穿墙场景蓝牙 Mesh 更稳定。",
+      "category": "dependency",
+      "industry": "IoT设备",
+      "usage": "domain_qa",
+      "source": "行业常识（组网方案）"
+    },
+    {
+      "content": "三种无线认证互不替代：中国 SRRC（工信部无线电型号核准）、欧盟 CE-RED（含射频+EMC）、美国 FCC ID；带无线模组的产品出口三个市场需分别满足，周期与费用独立。",
+      "category": "faq",
+      "industry": "通用",
+      "usage": "domain_qa",
+      "source": "行业常识（认证法规）"
+    },
+    {
+      "content": "代工厂工艺成熟度信号：最小封装尺寸（如 0402）、PCB 层数、三防漆可选、AOI/SPI 检测覆盖、老化测试流程，都是判断 SMT 与整机代工质量水平的关键指标。",
+      "category": "terminology",
+      "industry": "通用",
+      "usage": "domain_qa",
+      "source": "行业常识（SMT 工艺）"
+    }
+  ]
+}

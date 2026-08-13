@@ -1,0 +1,427 @@
+{
+  "_meta": {
+    "version": 1,
+    "note": "精选测试厂商（curated）：虚构公司名 + 真实行业参数，覆盖匹配三态与多品类，供贴近真实场景的测试与优化。匹配读取键：product_types/os_support/certifications/application_scenarios/interfaces/moq/lead_time_days（+summary_text）。",
+    "coverage": {"机顶盒": 4, "智能音箱": 3, "IoT设备": 3}
+  },
+  "vendors": [
+    {
+      "id": "V1",
+      "category": "机顶盒",
+      "scenario": {"type": "matched", "note": "全满足型：双系统+三接口+三认证，交期/起订量适中，需求全匹配应进 Top-1"},
+      "vendor": {
+        "company_name": "深圳华芯视讯科技有限公司",
+        "location": "广东深圳",
+        "main_industry": "智能硬件代工",
+        "credit_code": "91CUR1",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、组装测试、老化测试"],
+          "certifications": ["CE", "FCC", "SRRC"],
+          "os_support": ["Linux", "Android"],
+          "interfaces": ["网口", "USB", "HDMI"],
+          "moq": 1000,
+          "lead_time_days": 25,
+          "monthly_capacity": 50,
+          "product_types": ["机顶盒"],
+          "application_scenarios": ["家庭娱乐", "运营商IPTV"],
+          "customization": "ODM/OEM",
+          "decode_capability": ["H.264", "H.265", "AV1"],
+          "soc_platform": "Amlogic",
+          "wireless": ["WiFi"],
+          "tv_standard": ["DVB-C", "DVB-T"],
+          "output_interfaces": ["HDMI", "AV"],
+          "memory_storage": "2GB+8GB"
+        },
+        "summary_text": "专注机顶盒ODM，Linux/Android双系统，支持H.265/AV1 4K解码，月产能50万台，交期25天。",
+        "doc": "【深圳华芯视讯科技有限公司 能力介绍】\n本公司专注机顶盒ODM/OEM代工十余年，主要产品为智能机顶盒与运营商IPTV终端。支持 Linux 与 Android 双操作系统方案，主控平台采用 Amlogic，支持 H.264、H.265 与 AV1 4K 解码。标准接口包含网口、USB、HDMI；可选 WiFi 无线模块与 DVB-C、DVB-T 电视制式，输出接口支持 HDMI 与 AV。制造工艺涵盖 SMT贴片、组装测试与老化测试，月产能 50 万台，最小起订量 1000 台，常规交期 25 天。已通过 CE、FCC、SRRC 认证，可承接 ODM/OEM 定制。",
+        "golden": {
+          "process_types": ["SMT贴片", "组装测试", "老化测试"],
+          "certifications": ["CE", "FCC", "SRRC"],
+          "os_support": ["Linux", "Android"],
+          "interfaces": ["网口", "USB", "HDMI"],
+          "moq": 1000, "lead_time_days": 25, "monthly_capacity": 50,
+          "product_types": ["机顶盒"], "application_scenarios": ["家庭娱乐", "运营商IPTV"],
+          "customization": "ODM/OEM"
+        }
+      }
+    },
+    {
+      "id": "V2",
+      "category": "机顶盒",
+      "scenario": {"type": "partial", "note": "部分满足型：仅 Linux、无 HDMI、仅 CE（缺 FCC/SRRC）——测 partial 与接口/认证部分判定"},
+      "vendor": {
+        "company_name": "东莞粤海数字设备有限公司",
+        "location": "广东东莞",
+        "main_industry": "电子制造服务",
+        "credit_code": "91CUR2",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、组装测试"],
+          "certifications": ["CE"],
+          "os_support": ["Linux"],
+          "interfaces": ["网口", "USB"],
+          "moq": 3000,
+          "lead_time_days": 30,
+          "monthly_capacity": 30,
+          "product_types": ["机顶盒"],
+          "application_scenarios": ["运营商终端"],
+          "customization": "OEM",
+          "decode_capability": ["H.264", "H.265"],
+          "soc_platform": "Allwinner",
+          "wireless": ["WiFi"],
+          "tv_standard": ["DVB-C"],
+          "output_interfaces": ["AV"],
+          "memory_storage": "1GB+4GB"
+        },
+        "summary_text": "运营商机顶盒OEM，Linux单系统，支持DVB-C，月产能30万台，起订量3000台，交期30天。",
+        "doc": "【东莞粤海数字设备有限公司 能力介绍】\n本公司为运营商机顶盒 OEM 代工，主要服务广电与IPTV运营商。仅支持 Linux 单系统方案，主控采用 Allwinner，支持 H.264、H.265 解码与 DVB-C 制式。接口为网口与 USB，输出为 AV，可选 WiFi。工艺为 SMT贴片与组装测试，月产能 30 万台，最小起订量 3000 台，交期 30 天。已通过 CE 认证。",
+        "golden": {
+          "process_types": ["SMT贴片", "组装测试"],
+          "certifications": ["CE"],
+          "os_support": ["Linux"],
+          "interfaces": ["网口", "USB"],
+          "moq": 3000, "lead_time_days": 30, "monthly_capacity": 30,
+          "product_types": ["机顶盒"], "application_scenarios": ["运营商终端"],
+          "customization": "OEM"
+        }
+      }
+    },
+    {
+      "id": "V3",
+      "category": "机顶盒",
+      "scenario": {"type": "missing", "note": "缺项型：无认证声明（certifications=missing）、仅Android——测 missing 并入 partial 与关键参数缺失"},
+      "vendor": {
+        "company_name": "成都蓉城视讯科技",
+        "location": "四川成都",
+        "main_industry": "消费电子代工",
+        "credit_code": "91CUR3",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、组装"],
+          "certifications": [],
+          "os_support": ["Android"],
+          "interfaces": ["网口", "USB", "AV"],
+          "moq": 500,
+          "lead_time_days": 20,
+          "monthly_capacity": 10,
+          "product_types": ["机顶盒"],
+          "application_scenarios": ["家庭娱乐"],
+          "customization": "ODM",
+          "decode_capability": ["H.264"],
+          "soc_platform": "Rockchip",
+          "wireless": ["蓝牙"],
+          "tv_standard": ["DVB-T"],
+          "output_interfaces": ["AV"],
+          "memory_storage": "1GB+8GB"
+        },
+        "summary_text": "入门机顶盒ODM，Android单系统，起订量低至500台、交期20天，未声明出口认证。",
+        "doc": "【成都蓉城视讯科技 能力介绍】\n本公司提供入门级机顶盒 ODM 服务，Android 单系统，主控 Rockchip，支持 H.264 解码与 DVB-T 制式。接口为网口、USB 与 AV 输出，支持蓝牙。工艺为 SMT贴片与组装，月产能 10 万台，最小起订量 500 台，交期 20 天，支持快速打样。认证情况需按订单沟通。",
+        "golden": {
+          "process_types": ["SMT贴片", "组装"],
+          "certifications": [],
+          "os_support": ["Android"],
+          "interfaces": ["网口", "USB", "AV"],
+          "moq": 500, "lead_time_days": 20, "monthly_capacity": 10,
+          "product_types": ["机顶盒"], "application_scenarios": ["家庭娱乐"],
+          "customization": "ODM"
+        }
+      }
+    },
+    {
+      "id": "V4",
+      "category": "机顶盒",
+      "scenario": {"type": "matched-high-spec", "note": "高配但贵/慢型：参数全满足但起订量5000+交期45——测 moq/lead 维度对排序的影响（打分梯度）"},
+      "vendor": {
+        "company_name": "苏州星网智造科技有限公司",
+        "location": "江苏苏州",
+        "main_industry": "智能硬件代工",
+        "credit_code": "91CUR4",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、老化测试、组装"],
+          "certifications": ["CE", "FCC", "CCC", "SRRC"],
+          "os_support": ["Linux", "Android"],
+          "interfaces": ["网口", "USB", "HDMI", "AV"],
+          "moq": 5000,
+          "lead_time_days": 45,
+          "monthly_capacity": 20,
+          "product_types": ["机顶盒"],
+          "application_scenarios": ["家庭娱乐", "酒店IPTV", "运营商IPTV"],
+          "customization": "ODM/OEM",
+          "decode_capability": ["H.264", "H.265", "AV1"],
+          "soc_platform": "Amlogic",
+          "wireless": ["WiFi", "蓝牙"],
+          "tv_standard": ["DVB-C", "DVB-T", "ATSC"],
+          "output_interfaces": ["HDMI", "AV", "SPDIF"],
+          "memory_storage": "4GB+32GB"
+        },
+        "summary_text": "高端机顶盒方案商，全制式多认证，4K解码，但起订量5000台、交期45天。",
+        "doc": "【苏州星网智造科技有限公司 能力介绍】\n本公司为高端机顶盒 ODM/OEM 方案商，支持 Linux 与 Android 双系统，Amlogic 主控，H.264/H.265/AV1 全解码，4GB+32GB 存储。覆盖 DVB-C、DVB-T、ATSC 全制式，接口齐全（网口、USB、HDMI、AV、SPDIF），支持 WiFi 与蓝牙。已通过 CE、FCC、CCC、SRRC 认证。制造工艺含 SMT贴片、老化测试与组装，月产能 20 万台，最小起订量 5000 台，交期 45 天。",
+        "golden": {
+          "process_types": ["SMT贴片", "老化测试", "组装"],
+          "certifications": ["CE", "FCC", "CCC", "SRRC"],
+          "os_support": ["Linux", "Android"],
+          "interfaces": ["网口", "USB", "HDMI", "AV"],
+          "moq": 5000, "lead_time_days": 45, "monthly_capacity": 20,
+          "product_types": ["机顶盒"], "application_scenarios": ["家庭娱乐", "酒店IPTV", "运营商IPTV"],
+          "customization": "ODM/OEM"
+        }
+      }
+    },
+    {
+      "id": "V5",
+      "category": "智能音箱",
+      "scenario": {"type": "matched", "note": "全满足型：双系统+双接口+双认证，4/6麦，5/10W——智能音箱需求应进 Top-1"},
+      "vendor": {
+        "company_name": "东莞声学矩阵科技有限公司",
+        "location": "广东东莞",
+        "main_industry": "声学智能硬件代工",
+        "credit_code": "91CUR5",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、声学测试、组装"],
+          "certifications": ["CE", "FCC"],
+          "os_support": ["Android", "RTOS"],
+          "interfaces": ["蓝牙", "WiFi", "Type-C"],
+          "moq": 1000,
+          "lead_time_days": 25,
+          "monthly_capacity": 40,
+          "product_types": ["智能音箱"],
+          "application_scenarios": ["家庭", "智能家居"],
+          "customization": "ODM/OEM",
+          "mic_array": ["4麦", "6麦"],
+          "speaker_power": ["5W", "10W"],
+          "voice_assistant": ["自研", "接入第三方"],
+          "wireless": ["WiFi", "蓝牙"]
+        },
+        "summary_text": "声学智能音箱ODM，Android/RTOS双系统，4/6麦阵列，5/10W喇叭，月产能40万台，交期25天。",
+        "doc": "【东莞声学矩阵科技有限公司 能力介绍】\n本公司专注智能音箱 ODM/OEM，支持 Android 与 RTOS 双系统方案。提供 4 麦与 6 麦麦克风阵列，支持远场语音唤醒与波束成形；喇叭功率 5W 与 10W 可选。接口含蓝牙、WiFi 与 Type-C，支持自研或接入第三方语音助手。制造工艺含 SMT贴片、声学测试与组装，月产能 40 万台，最小起订量 1000 台，交期 25 天。已通过 CE、FCC 认证。",
+        "golden": {
+          "process_types": ["SMT贴片", "声学测试", "组装"],
+          "certifications": ["CE", "FCC"],
+          "os_support": ["Android", "RTOS"],
+          "interfaces": ["蓝牙", "WiFi", "Type-C"],
+          "moq": 1000, "lead_time_days": 25, "monthly_capacity": 40,
+          "product_types": ["智能音箱"], "application_scenarios": ["家庭", "智能家居"],
+          "customization": "ODM/OEM"
+        }
+      }
+    },
+    {
+      "id": "V6",
+      "category": "智能音箱",
+      "scenario": {"type": "partial", "note": "部分满足型：仅RTOS、2麦、3W、仅CE——测麦克风阵列/功率/认证的 partial"},
+      "vendor": {
+        "company_name": "深圳悦耳智能音频有限公司",
+        "location": "广东深圳",
+        "main_industry": "消费电子代工",
+        "credit_code": "91CUR6",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、声学测试"],
+          "certifications": ["CE"],
+          "os_support": ["RTOS"],
+          "interfaces": ["蓝牙", "WiFi"],
+          "moq": 2000,
+          "lead_time_days": 20,
+          "monthly_capacity": 30,
+          "product_types": ["智能音箱"],
+          "application_scenarios": ["桌面"],
+          "customization": "OEM",
+          "mic_array": ["2麦"],
+          "speaker_power": ["3W"],
+          "voice_assistant": ["接入第三方"],
+          "wireless": ["WiFi", "蓝牙"]
+        },
+        "summary_text": "桌面智能音箱OEM，RTOS单系统，2麦近场、3W喇叭，月产能30万台，交期20天。",
+        "doc": "【深圳悦耳智能音频有限公司 能力介绍】\n本公司提供桌面级智能音箱 OEM 服务，RTOS 单系统方案，2 麦麦克风阵列（近场拾音），3W 喇叭功率，接入第三方语音助手。接口为蓝牙与 WiFi。工艺为 SMT贴片与声学测试，月产能 30 万台，最小起订量 2000 台，交期 20 天。已通过 CE 认证。",
+        "golden": {
+          "process_types": ["SMT贴片", "声学测试"],
+          "certifications": ["CE"],
+          "os_support": ["RTOS"],
+          "interfaces": ["蓝牙", "WiFi"],
+          "moq": 2000, "lead_time_days": 20, "monthly_capacity": 30,
+          "product_types": ["智能音箱"], "application_scenarios": ["桌面"],
+          "customization": "OEM"
+        }
+      }
+    },
+    {
+      "id": "V7",
+      "category": "智能音箱",
+      "scenario": {"type": "missing", "note": "缺项型：仅蓝牙无WiFi、无认证——测接口/认证 missing/partial"},
+      "vendor": {
+        "company_name": "合肥皖声智联科技有限公司",
+        "location": "安徽合肥",
+        "main_industry": "智能硬件代工",
+        "credit_code": "91CUR7",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、组装"],
+          "certifications": [],
+          "os_support": ["Android"],
+          "interfaces": ["蓝牙"],
+          "moq": 2000,
+          "lead_time_days": 30,
+          "monthly_capacity": 20,
+          "product_types": ["智能音箱"],
+          "application_scenarios": ["家庭"],
+          "customization": "ODM",
+          "mic_array": ["4麦"],
+          "speaker_power": ["5W"],
+          "voice_assistant": ["接入第三方"],
+          "wireless": ["蓝牙"]
+        },
+        "summary_text": "智能音箱ODM，Android单系统，4麦5W，但仅蓝牙连接、未声明认证。",
+        "doc": "【合肥皖声智联科技有限公司 能力介绍】\n本公司提供智能音箱 ODM，Android 单系统，4 麦麦克风阵列、5W 喇叭，接入第三方语音助手。无线连接仅支持蓝牙。工艺为 SMT贴片与组装，月产能 20 万台，最小起订量 2000 台，交期 30 天。认证情况需按订单沟通。",
+        "golden": {
+          "process_types": ["SMT贴片", "组装"],
+          "certifications": [],
+          "os_support": ["Android"],
+          "interfaces": ["蓝牙"],
+          "moq": 2000, "lead_time_days": 30, "monthly_capacity": 20,
+          "product_types": ["智能音箱"], "application_scenarios": ["家庭"],
+          "customization": "ODM"
+        }
+      }
+    },
+    {
+      "id": "V8",
+      "category": "IoT设备",
+      "scenario": {"type": "matched", "note": "全满足型：多协议+多传感器+双认证，IP54/IP65——IoT 通用需求应进 Top-1"},
+      "vendor": {
+        "company_name": "宁波万物互联传感科技有限公司",
+        "location": "浙江宁波",
+        "main_industry": "物联网终端代工",
+        "credit_code": "91CUR8",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、防水测试、组装"],
+          "certifications": ["CE", "SRRC"],
+          "os_support": ["RTOS", "FreeRTOS"],
+          "interfaces": ["BLE", "WiFi", "Zigbee", "LoRa"],
+          "moq": 500,
+          "lead_time_days": 20,
+          "monthly_capacity": 30,
+          "product_types": ["IoT设备"],
+          "application_scenarios": ["智能家居", "工业监测"],
+          "customization": "ODM",
+          "comm_protocol": ["BLE", "WiFi", "Zigbee", "LoRa"],
+          "power_supply": "电池",
+          "ip_rating": ["IP54", "IP65"],
+          "sensors": ["温度", "湿度", "运动"]
+        },
+        "summary_text": "IoT终端ODM，支持BLE/WiFi/Zigbee/LoRa多协议，IP54/IP65防水，电池供电，月产能30万台。",
+        "doc": "【宁波万物互联传感科技有限公司 能力介绍】\n本公司专注物联网终端 ODM，支持 RTOS 与 FreeRTOS 系统，通信协议覆盖 BLE、WiFi、Zigbee 与 LoRa。可选温度、湿度、运动传感器，电池供电设计，防护等级 IP54/IP65，含防水测试工艺。制造工艺为 SMT贴片、防水测试与组装，月产能 30 万台，最小起订量 500 台，交期 20 天。已通过 CE、SRRC 认证。",
+        "golden": {
+          "process_types": ["SMT贴片", "防水测试", "组装"],
+          "certifications": ["CE", "SRRC"],
+          "os_support": ["RTOS", "FreeRTOS"],
+          "interfaces": ["BLE", "WiFi", "Zigbee", "LoRa"],
+          "moq": 500, "lead_time_days": 20, "monthly_capacity": 30,
+          "product_types": ["IoT设备"], "application_scenarios": ["智能家居", "工业监测"],
+          "customization": "ODM"
+        }
+      }
+    },
+    {
+      "id": "V9",
+      "category": "IoT设备",
+      "scenario": {"type": "partial", "note": "部分满足型：仅NB-IoT/4G、仅CE、仅温度传感器——测协议/认证 partial"},
+      "vendor": {
+        "company_name": "深圳深蓝物联网终端有限公司",
+        "location": "广东深圳",
+        "main_industry": "物联网终端代工",
+        "credit_code": "91CUR9",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、环境测试"],
+          "certifications": ["CE"],
+          "os_support": ["RTOS"],
+          "interfaces": ["NB-IoT", "4G"],
+          "moq": 1000,
+          "lead_time_days": 25,
+          "monthly_capacity": 20,
+          "product_types": ["IoT设备"],
+          "application_scenarios": ["资产追踪", "表计"],
+          "customization": "OEM",
+          "comm_protocol": ["NB-IoT", "4G"],
+          "power_supply": "电池",
+          "ip_rating": ["IP65"],
+          "sensors": ["温度"]
+        },
+        "summary_text": "NB-IoT/4G蜂窝终端OEM，IP65电池供电，支持温度传感，月产能20万台，交期25天。",
+        "doc": "【深圳深蓝物联网终端有限公司 能力介绍】\n本公司提供蜂窝物联网终端 OEM，RTOS 系统，通信为 NB-IoT 与 4G，适配资产追踪与表计场景。电池供电，防护 IP65，含环境测试工艺。支持温度传感器。月产能 20 万台，最小起订量 1000 台，交期 25 天。已通过 CE 认证。",
+        "golden": {
+          "process_types": ["SMT贴片", "环境测试"],
+          "certifications": ["CE"],
+          "os_support": ["RTOS"],
+          "interfaces": ["NB-IoT", "4G"],
+          "moq": 1000, "lead_time_days": 25, "monthly_capacity": 20,
+          "product_types": ["IoT设备"], "application_scenarios": ["资产追踪", "表计"],
+          "customization": "OEM"
+        }
+      }
+    },
+    {
+      "id": "V10",
+      "category": "IoT设备",
+      "scenario": {"type": "niche", "note": "专精型：仅LoRa、无认证、面向智慧农业——LoRa/农业需求匹配、通用WiFi IoT需求 missing"},
+      "vendor": {
+        "company_name": "武汉绿洲农业感知科技有限公司",
+        "location": "湖北武汉",
+        "main_industry": "农业物联网终端",
+        "credit_code": "91CUR10",
+        "audit_status": "passed"
+      },
+      "capability": {
+        "structured_tags": {
+          "process_types": ["SMT贴片、防水测试"],
+          "certifications": [],
+          "os_support": ["FreeRTOS"],
+          "interfaces": ["LoRa"],
+          "moq": 2000,
+          "lead_time_days": 30,
+          "monthly_capacity": 10,
+          "product_types": ["IoT设备"],
+          "application_scenarios": ["智慧农业"],
+          "customization": "ODM",
+          "comm_protocol": ["LoRa"],
+          "power_supply": "电池",
+          "ip_rating": ["IP65"],
+          "sensors": ["温度", "湿度"]
+        },
+        "summary_text": "农业物联网专精ODM，LoRa组网+温湿度传感，IP65电池供电，月产能10万台，交期30天。",
+        "doc": "【武汉绿洲农业感知科技有限公司 能力介绍】\n本公司专注智慧农业物联网终端 ODM，FreeRTOS 系统，采用 LoRa 组网（自建网关、免流量费），支持温度与湿度传感器，电池供电，防护 IP65 含防水测试。月产能 10 万台，最小起订量 2000 台，交期 30 天。",
+        "golden": {
+          "process_types": ["SMT贴片", "防水测试"],
+          "certifications": [],
+          "os_support": ["FreeRTOS"],
+          "interfaces": ["LoRa"],
+          "moq": 2000, "lead_time_days": 30, "monthly_capacity": 10,
+          "product_types": ["IoT设备"], "application_scenarios": ["智慧农业"],
+          "customization": "ODM"
+        }
+      }
+    }
+  ]
+}

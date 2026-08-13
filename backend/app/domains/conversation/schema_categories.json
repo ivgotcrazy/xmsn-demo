@@ -1,0 +1,26 @@
+{
+  "机顶盒": [
+    {"key": "decode_capability", "label": "解码能力", "kind": "multi", "options": ["H.264", "H.265", "AV1", "HDR"]},
+    {"key": "soc_platform", "label": "主控平台", "kind": "single", "options": ["Amlogic", "Allwinner", "HiSilicon", "Rockchip"]},
+    {"key": "wireless", "label": "无线", "kind": "multi", "options": ["WiFi", "蓝牙", "无"]},
+    {"key": "tv_standard", "label": "电视制式", "kind": "multi", "options": ["DVB-C", "DVB-T", "ATSC", "ISDB", "无"]},
+    {"key": "output_interfaces", "label": "输出接口", "kind": "multi", "options": ["HDMI", "AV", "SPDIF"],
+     "level": "soft",
+     "depends_on": [{"key": "product_type", "values": ["机顶盒"]},
+                    {"key": "interfaces", "values": ["HDMI"]}]},
+    {"key": "memory_storage", "label": "存储配置", "kind": "single"}
+  ],
+  "智能音箱": [
+    {"key": "mic_array", "label": "麦克风阵列", "kind": "single", "options": ["2麦", "4麦", "6麦"]},
+    {"key": "speaker_power", "label": "喇叭功率", "kind": "single", "options": ["3W", "5W", "10W"]},
+    {"key": "voice_assistant", "label": "语音助手", "kind": "single", "options": ["自研", "接入第三方"]},
+    {"key": "wireless", "label": "无线", "kind": "multi", "options": ["WiFi", "蓝牙"]}
+  ],
+  "IoT设备": [
+    {"key": "comm_protocol", "label": "通信协议", "kind": "multi", "options": ["BLE", "WiFi", "Zigbee", "LoRa", "NB-IoT", "4G"]},
+    {"key": "power_supply", "label": "供电方式", "kind": "single", "options": ["电池", "市电", "USB"]},
+    {"key": "ip_rating", "label": "防护等级", "kind": "single", "options": ["IP54", "IP65", "无"]},
+    {"key": "sensors", "label": "传感器", "kind": "multi", "options": ["温度", "湿度", "运动", "无"]}
+  ],
+  "其他": []
+}

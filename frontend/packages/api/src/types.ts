@@ -227,6 +227,7 @@ export type ConfirmResponse = {
   request_id: string;
   version: number;
   redirect_to?: string;
+  warnings?: string[];
 };
 export type ConversationListItem = {
   conversation_id: string;
@@ -374,6 +375,9 @@ export type MessageResponse = {
   assistant_message: AssistantMessage;
   demand_points?: DemandPoint[];
   title?: string;
+  submitted?: boolean;
+  redirect_to?: string;
+  warnings?: string[];
 };
 export type RegisterRequest = {
   phone?: (string | null);

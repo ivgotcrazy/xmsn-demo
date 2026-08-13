@@ -1,9 +1,9 @@
-"""对话 Agent 核心（T3.3）：意图路由 / 槽位合并 / 完成判定 / 追问。
+"""对话 Agent 核心（代理详细设计 v2 8/9 章）：意图路由 / 推理节点(Tool Calling) / 合并与修剪 / 完成判定 / 追问。
 
-实现以《代理详细设计》LLD v1.1 为准（2 章状态机 / 0.4 完成判定）：
-- 选项点击确定性直写；自由文本 LLM 解析 → merge_slot 三态合并（补充/纠正/排除）
-- 完成判定双通道：品类锚点（product_type）+ 关键维度（os/interfaces/certifications）
-- 追问顺序来自需求 Schema（固定 + 品类扩展）
+- 意图路由 route_intent：仅强指令拦截 + 纯引导模板（B/C 快通道）；自由文本一律进推理节点
+- 推理节点 agent_reasoning：一次推断 reply_text + tool_call(slot_delta/extra) + intent（Tool Calling）
+- reconcile 状态修剪（依赖/级联清理）+ 动态 Validator（hard/soft/optional）+ pending_slots 追问
+- 熔断 _stall_counter：连续无进展换方式/引导人工
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import re
 
 from app.domains.conversation import schema as req_schema
 from app.domains.conversation.schema import SlotTriState
-from app.llm.client import chat
+from app.llm.client import chat, chat_tool
 
 logger = logging.getLogger("xmsn.agent")
 
@@ -46,12 +46,48 @@ EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在�
 {message}
 """
 
-# 完成态 confirm / 开放引导文案（继续补充去重 + 开放引导）
-CONFIRM_TEXT = "核心需求已明确，确认完成？还是继续补充？"
-OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「确认完成」结束。"
+# 完成态 confirm / 开放引导文案（统一"确认并提交匹配"标签 + 开放引导）
+CONFIRM_TEXT = "核心需求已明确，确认并提交匹配？还是继续补充？"
+OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「确认并提交匹配」结束。"
 
 # 继续补充的短填充语（完成态下直接开放引导，跳过 LLM）
 _CONTINUATION = ("还有", "继续", "还要", "补充", "其他", "别的", "再来")
+
+# 强命令（明确授权直接提交，SC-22）
+CONFIRM_COMMANDS = ("确认并提交匹配", "确认并提交", "提交匹配", "提交需求", "完成需求", "确认完成")
+# 弱收尾（SC-22b：复述+引导确认，不直接提交）
+WEAK_CLOSE_PAT = ("就这样", "差不多了", "可以了", "没别的了", "就这些", "行了", "结束吧")
+# 纯引导短句（看结果 / 推荐厂商 → 引导去匹配详情）
+GUIDE_RESULT_PAT = ("看结果", "结果呢", "匹配结果", "推荐几个", "推荐一下", "有哪些厂商", "能匹配吗", "结果怎么样")
+GUIDE_BACK_PAT = ("谢谢", "再见", "拜拜", "辛苦了", "好的", "知道了")
+
+# B/C 档规则快通道（厂商比较/闲聊）：正则命中即引导（SC-29/34/35）
+_REDIRECT_PAT = re.compile(
+    r"哪家|谁(更好|合适|能|比)|更好|更合适|对比|比一下|比较|"
+    r"推荐.{0,6}(厂商|厂家|家)|这家|那家|A厂|B厂|上面.{0,4}(厂|家)|"
+    r"结果.{0,4}(好|准)|几个厂商", re.I)
+_OFFTOPIC_PAT = re.compile(
+    r"^(你好|您好|在吗|在不在|你是(谁|什么)|今天天气|你会做|你能做|介绍一下你|"
+    r"讲个笑话|什么是物联网|人工智能趋势)", re.I)
+
+# 短消息守卫：弱收尾/引导/B-C 仅在纯短语短消息拦截（防"就这样吧，接口加个USB"被吞）
+SHORT_GUARD = 12
+
+# SC-05 顾问反推：用户在萃取字段上拿不定主意 → 给建议值（grounded，用户确认后直写，不替用户决定）
+_UNSURE_PAT = ("不确定", "不知道", "你看着办", "你推荐", "推荐一下", "随便", "听你的", "你建议", "帮我选", "拿不定", "都行", "选什么")
+ACCEPT_RECOMMEND_PAT = ("按建议", "采纳", "按推荐", "就按你说的", "按你说的", "按这个")
+# 行业默认配置（无画像/知识时给 grounded 建议值；L2 SC-05）
+_CATEGORY_DEFAULTS: dict[str, dict] = {
+    "机顶盒": {"os": ["Linux"], "interfaces": ["网口", "HDMI"], "certifications": ["CE"],
+               "moq": 5000, "lead_time_days": 30, "decode_capability": ["H.265"],
+               "soc_platform": "Amlogic", "wireless": ["WiFi"]},
+    "智能音箱": {"os": ["Linux"], "interfaces": ["WiFi", "蓝牙"], "certifications": ["CE"],
+                "mic_array": "4麦", "speaker_power": "5W", "wireless": ["WiFi", "蓝牙"]},
+    "IoT设备": {"os": ["RTOS"], "interfaces": ["WiFi"], "certifications": ["CE"],
+                "comm_protocol": ["WiFi"], "power_supply": "电池", "ip_rating": "无"},
+}
+# 画像维度名 → 槽位 key（build_profile_context 输出 "维度名:值1、值2；…"）
+_PROFILE_DIM_MAP = {"os": "偏好操作系统", "interfaces": "常用接口", "certifications": "常备认证", "product_type": "行业焦点"}
 
 
 def is_continuation(text: str) -> bool:
@@ -61,19 +97,123 @@ def is_continuation(text: str) -> bool:
 
 
 def route_intent(message: str | None, clicked_option: str | None, state: dict) -> str:
-    """意图分类（LLD 2.2）：option_click / confirm / done / help / free_text。"""
+    """意图路由（代理详细设计 v2 8.2 ②）：仅强指令拦截 + 纯引导模板；自由文本一律进推理节点。
+
+    返回：option_click / confirm_command / help / weak_close / guide_result / guide_back /
+          recommend / accept_recommend / decline_recommend / skip_current / free_text
+    """
     if clicked_option:
         return "option_click"
     if message is None:
-        return "confirm"
+        return "confirm_command"
     m = message.strip()
-    if re.match(r"^/done$", m, re.I) or "完成需求" in m or "就这样" in m or "可以了" in m:
-        return "done"
-    if "确认" in m and state.get("product_type"):
-        return "confirm"
+    if not m:
+        return "free_text"
+    # 强命令（明确授权）→ 直接提交（SC-22/25）
+    if re.match(r"^/done$", m, re.I) or any(c in m for c in CONFIRM_COMMANDS):
+        return "confirm_command"
     if m in ("帮助", "help", "?") or m.startswith("/help"):
         return "help"
-    return "free_text"
+    if len(m) <= SHORT_GUARD:
+        # 短消息守卫：先判引导/厂商/弱收尾，再 SC-05 推荐（"你推荐几个厂商"应走引导而非推荐）
+        if _REDIRECT_PAT.search(m) or any(w in m for w in GUIDE_RESULT_PAT):
+            return "guide_result"          # 厂商/结果 → 引导看详情
+        if _OFFTOPIC_PAT.match(m) or any(w in m for w in GUIDE_BACK_PAT):
+            return "guide_back"            # 闲聊/无关 → 守门拉回
+        if any(w in m for w in WEAK_CLOSE_PAT):
+            return "weak_close"            # 弱收尾 → 复述+引导确认（不直接提交）
+        return _recommend_intent(m, state) or "free_text"
+    # 长消息：SC-05 推荐/接受（可长句），其余放行推理节点（混合意图一次处理）
+    return _recommend_intent(m, state) or "free_text"
+
+
+def _recommend_intent(m: str, state: dict) -> str | None:
+    """SC-05 推荐相关意图：accept/decline/skip（需已有 _recommend）或 recommend（拿不定主意）。"""
+    if state.get("_recommend"):
+        if any(w in m for w in ACCEPT_RECOMMEND_PAT):
+            return "accept_recommend"
+        if m in ("我自己定", "我自己选", "我自己说"):
+            return "decline_recommend"
+        if m in ("跳过", "先不填", "不限"):
+            return "skip_current"
+    if any(w in m for w in _UNSURE_PAT):
+        return "recommend"
+    return None
+
+
+def guide_override_for(text: str) -> str | None:
+    """推理节点后置兜底：长消息漏网命中 B/C → 返回 guide_result/guide_back（正文用引导话术，槽位仍可落）。"""
+    if _REDIRECT_PAT.search(text) or any(w in text for w in GUIDE_RESULT_PAT):
+        return "guide_result"
+    if _OFFTOPIC_PAT.match(text) or any(w in text for w in GUIDE_BACK_PAT):
+        return "guide_back"
+    return None
+
+
+def guide_to_results(category: str | None = None) -> str:
+    """SC-26/27：厂商/结果 → 引导去匹配详情（不代答、不评价）。"""
+    return "匹配结果请到「匹配详情」页查看参数判定与原文溯源；我这边可以继续帮您补充需求。"
+
+
+def guide_back(category: str | None = None) -> str:
+    """SC-28~35：无关/闲聊 → 守门拉回主线。"""
+    c = category or "您的"
+    return f"我们专注于帮您梳理{c}代工需求，继续吧。"
+
+
+def _fmt_val(v) -> str:
+    if isinstance(v, list):
+        return "、".join(str(x) for x in v)
+    return str(v)
+
+
+def _extract_profile_vals(profile_ctx: str) -> dict[str, list[str]]:
+    """从画像串（"维度名:值1、值2；…"）提取各槽位偏好值。"""
+    out: dict[str, list[str]] = {}
+    if not profile_ctx:
+        return out
+    for slot_key, dim_name in _PROFILE_DIM_MAP.items():
+        m = re.search(re.escape(dim_name) + r":([^；]+)", profile_ctx)
+        if m:
+            vals = [x.strip() for x in m.group(1).split("、") if x.strip()]
+            if vals:
+                out[slot_key] = vals
+    return out
+
+
+def build_recommendation(state: dict, profile_ctx: str = "") -> dict | None:
+    """SC-05 顾问反推：为当前待填维度给建议值（画像 → 行业默认 → 枚举首项），grounded 不替用户决定。
+
+    返回 {key, value, label, reason}；无待填（完成态）返回 None。
+    """
+    pt = _product_type(state)
+    pvals = _extract_profile_vals(profile_ctx)
+    if not pt:
+        focus = (pvals.get("product_type") or ["机顶盒"])[0]
+        return {"key": "product_type", "value": focus, "label": "产品类型",
+                "reason": f"「{focus}」是您历史常关注的品类，且平台厂商资源较全"}
+    nf = req_schema.next_slot(state, pt)
+    if not nf:
+        return None
+    key, kind = nf["key"], nf.get("kind")
+    suggested = None
+    source = ""
+    pv = pvals.get(key)
+    if pv:
+        suggested = pv if kind == "multi" else pv[0]
+        source = "您历史需求偏好"
+    else:
+        dflt = _CATEGORY_DEFAULTS.get(pt, {}).get(key)
+        if dflt is not None:
+            suggested = dflt
+            source = "该品类行业常见配置"
+        elif nf.get("options"):
+            suggested = [nf["options"][0]] if kind == "multi" else nf["options"][0]
+            source = "行业常用选项"
+    if suggested is None:
+        return None
+    reason = f"基于{source}，{nf['label']}建议选「{_fmt_val(suggested)}」" if source else ""
+    return {"key": key, "value": suggested, "label": nf["label"], "reason": reason}
 
 
 def write_option(state: dict, key: str, value) -> dict:
@@ -100,7 +240,10 @@ def merge_slot(state: dict, slot_delta: dict, extra: list[str] | None = None) ->
     - 多选：merge=replace 覆盖旧值（纠正）；默认 append 去重追加
     - 自创字段（不在当前品类 Schema）→ 归入 extra_constraints（UC-10），不入固定槽位
     """
-    pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+    cur_pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+    d_pt = (slot_delta or {}).get("product_type")
+    delta_pt = d_pt.get("value") if isinstance(d_pt, dict) else None
+    pt = delta_pt or cur_pt  # 同一条消息同时给品类+扩展字段时，按新品类校验合法 key
     valid_keys = {f["key"] for f in req_schema.fields_for(pt)} | {"product_type", "extra_constraints"}
     for key, sv in (slot_delta or {}).items():
         if not isinstance(sv, dict):
@@ -209,35 +352,273 @@ async def extract_slots(state: dict, message: str, db=None, meta: dict | None = 
                 logger.warning("llm_call_log write failed: %s", exc)
 
 
+def _product_type(state: dict) -> str | None:
+    return (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+
+
 def completion_ready(state: dict) -> bool:
-    """完成判定（LLD 0.4 prompt_on_anchor_and_key）：锚点 + 关键维度已覆盖。"""
-    pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
-    if not pt:
-        return False
-    field_keys = [f["key"] for f in req_schema.fields_for(pt)]
-    for d in req_schema.KEY_DIMS:
-        if d in field_keys:
-            sv = state.get(d)
-            if not sv or sv.get("state") != SlotTriState.SET.value or not sv.get("value"):
-                return False
-    return True
+    """完成判定（动态 Validator 9.3）：active 且 hard 约束 100% 覆盖。"""
+    return req_schema.validate_completion(state, _product_type(state))["done"]
 
 
-def decide_question(state: dict) -> tuple[str | None, list[str]]:
-    """返回下一个追问（字段 key + 文案）与选项；完成则返回 None。"""
-    pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+def decide_question(state: dict) -> tuple[str | None, str, list[str]]:
+    """返回 (追问字段 key|None, 文案, 选项)；完成则 None + 确认/开放引导；熔断触发给换方式话术。"""
+    pt = _product_type(state)
+    # 熔断：连续无进展 ≥3 轮 → 换方式/引导人工（SC-37/38/33）
+    if state.get("_stall_counter", 0) >= 3:
+        return None, stall_text(), ["确认并提交匹配", "继续补充"]
     if not pt:
         f = req_schema.FIXED_FIELDS[0]  # product_type
         return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options", []))
-    if completion_ready(state):
+    verdict = req_schema.validate_completion(state, pt)
+    if verdict["done"]:
         # 仅首次提示确认；再次进入完成态 → 开放引导（不再重复 confirm）
         if state.get("_confirm_prompted"):
-            return None, OPEN_GUIDE_TEXT, ["确认完成"]
+            return None, OPEN_GUIDE_TEXT, ["确认并提交匹配", "继续补充"]
         state["_confirm_prompted"] = True
-        return None, CONFIRM_TEXT, ["确认完成", "继续补充"]
-    nf = req_schema.next_unfilled(state, pt)
+        return None, CONFIRM_TEXT, ["确认并提交匹配", "继续补充"]
+    nf = req_schema.next_slot(state, pt)
     if not nf:
-        return None, OPEN_GUIDE_TEXT, ["确认完成"]
+        return None, OPEN_GUIDE_TEXT, ["确认并提交匹配", "继续补充"]
     opts = list(nf.get("options", []))
-    question = f"请问您需要哪些{nf['label']}？" if nf["kind"] == "multi" else f"请填写{nf['label']}："
+    level = nf.get("level", req_schema.LEVEL_SOFT)
+    prefix = "（可选）" if level == req_schema.LEVEL_OPTIONAL else ""
+    question = f"{prefix}请问您需要哪些{nf['label']}？" if nf["kind"] == "multi" else f"{prefix}请填写{nf['label']}："
     return nf["key"], question, opts
+
+
+# ---- 代理详细设计 v2 8/9：推理节点 / 状态修剪 / 引导模板 ----
+
+
+def build_tool_schema(active_fields: list[dict]) -> dict:
+    """allowed_set → update_requirement_slots 的 tool JSON Schema（设计 9.4 + __states__ 三态）。"""
+    props: dict = {}
+    for f in active_fields:
+        key = f["key"]
+        if f.get("kind") == "multi":
+            p: dict = {"type": "array", "items": {"type": "string"}}
+            if f.get("options"):
+                p["items"]["enum"] = f["options"]
+        elif f.get("kind") == "number":
+            p = {"type": "integer"}
+        else:
+            p = {"type": "string"}
+            if f.get("options"):
+                p["enum"] = f["options"]
+        props[key] = p
+    props["extra_constraints"] = {"type": "array", "items": {"type": "string"},
+                                  "description": "用户提出的未预定义维度（如'外壳黑色'）"}
+    props["__states__"] = {"type": "object",
+                           "description": "三态覆盖（仅出现时才写）：{'<key>':'excluded'} 排除某能力、"
+                                          "{'<key>':'wildcard'} 不限；未出现 = 正常指定 set。"}
+    return {
+        "type": "function",
+        "function": {
+            "name": "update_requirement_slots",
+            "description": "更新用户代工需求槽位。仅在用户明确提到时才写；纠正（改成/不对）覆盖旧值；"
+                           "排除（不要X）把值写入该槽位并在 __states__ 标记 excluded；不限/跳过 → __states__ 标 wildcard；"
+                           "无法归入固定槽位的归入 extra_constraints。不要编造。",
+            "parameters": {"type": "object", "properties": props, "required": []},
+        },
+    }
+
+
+def _render_slots(state: dict) -> str:
+    lines = []
+    for k, sv in state.items():
+        if k.startswith("_") or not isinstance(sv, dict) or "state" not in sv:
+            continue
+        st = sv["state"]
+        v = sv.get("value")
+        val = "、".join(v) if isinstance(v, list) else v
+        lines.append(f"- {k}: state={st}, value={val}")
+    return "\n".join(lines) if lines else "（无）"
+
+
+def _allowed_lines(active_fields: list[dict]) -> str:
+    lines = []
+    for f in active_fields:
+        opts = " /".join(f.get("options", []))
+        lines.append(f"- {f['key']}（{f['label']}，{f.get('level')}）{opts}")
+    return "\n".join(lines) if lines else "（无）"
+
+
+async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None = None) -> dict:
+    """推理节点（④）：一次推断 reply_text + tool_call(slot_delta/extra) + intent（Tool Calling）。
+
+    返回 {reply_text, slot_delta, extra_constraints, intent, has_tool}；
+    intent: extract（有槽位）/ qa_or_guide（仅正文）/ empty（异常/空）。
+    """
+    import time as _time
+    from app.core.config import settings as _settings
+    from app.db.models import LlmCallLog
+
+    pt = _product_type(state)
+    active = req_schema.active_fields(state, pt)
+    if not pt:
+        # 品类未定时放行全部品类扩展字段（SC-04 一次给全含扩展字段）；merge 后 reconcile 修剪失效品类字段
+        all_ext: list[dict] = []
+        for cat_fields in req_schema.CATEGORY_EXTENSIONS.values():
+            all_ext.extend(cat_fields)
+        active = active + all_ext
+    nf = req_schema.next_slot(state, pt)
+    tool = build_tool_schema(active)
+
+    knowledge = ""
+    if db is not None:
+        try:
+            from app.domains.conversation.retriever import build_knowledge_section, build_rag_query, retrieve
+            hits = await retrieve(db, build_rag_query(state), pt)
+            knowledge = build_knowledge_section(hits)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("rag inject failed (降级): %s", exc)
+
+    next_hint = f"{nf['label']}" if nf else "（无，可围绕当前需求自然收尾）"
+    sys_prompt = (
+        "你是需脉AI选型助手，专注 B2B 代工制造需求萃取。\n"
+        f"当前品类：{pt or '未定'}\n"
+        f"本轮建议追问维度：{next_hint}（你可围绕它自然提问；若用户已提供其他合法槽位也可顺带写入）\n"
+        "# 当前可填槽位（allowed_set）\n" + _allowed_lines(active) + "\n"
+        "# 当前已填槽位（三态）\n" + _render_slots(state) + "\n"
+        "# 规则\n"
+        "1. 用户明确提到的槽位写入工具参数 update_requirement_slots；未提到的不写。\n"
+        "2. 纠正（改成X/不对，是X）→ 该槽位只写新值（覆盖）。\n"
+        "3. 排除（不要X）→ 值写该槽位 + __states__ 标记 {'<key>':'excluded'}；不限/跳过 → __states__ 标记 wildcard。\n"
+        "4. 自创字段（如'外壳黑色'）→ 归入 extra_constraints。\n"
+        "5. 若用户只问领域知识（与本轮需求决策相关，如 Linux 与 Android 区别）→ 不调工具，正文简短回答（≤3~5句）；"
+        "若基于行业背景知识作答，末尾注明「依据：…」来源；并引导回槽位。\n"
+        "6. 若用户询问厂商比较/评价或与需求无关 → 不调工具，正文用引导话术（不评价厂商、不闲聊开走）。\n"
+        "7. 无论是否调用工具，正文都给出一句简短自然回应（回执/引导/答疑）。\n"
+        + (knowledge or "") + "\n"
+        + ("# 当前用户画像\n" + ((meta or {}).get("user_profile") or "（无）") + "\n")
+    )
+    t0 = _time.perf_counter()
+    raw_tool_calls: list[dict] = []
+    raw_content = ""
+    ok = False
+    usage: dict = {}
+    try:
+        res = await chat_tool(
+            [{"role": "system", "content": sys_prompt},
+             {"role": "user", "content": message[:2000]}],
+            [tool], tool_choice="auto", temperature=0.1, max_tokens=1024,
+        )
+        raw_content = res.content
+        raw_tool_calls = res.tool_calls
+        usage = res.usage or {}
+        ok = True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("agent_reasoning failed: %s", exc)
+
+    slot_delta: dict = {}
+    extra: list[str] = []
+    has_tool = False
+    allowed_keys = {f["key"] for f in active} | {"product_type"}
+    kinds = {f["key"]: f.get("kind") for f in active}
+    for tc in raw_tool_calls:
+        if tc["name"] != "update_requirement_slots":
+            continue
+        has_tool = True
+        args = tc["arguments"] or {}
+        states = args.get("__states__") or {}
+        for k, v in args.items():
+            if k == "__states__":
+                continue
+            if k == "extra_constraints":
+                ex = v if isinstance(v, list) else [v]
+                extra = list(dict.fromkeys(str(x) for x in ex if x not in (None, "")))
+                continue
+            if k not in allowed_keys:
+                # 自创/非法 key → 归 extra_constraints
+                vals = v if isinstance(v, list) else [v]
+                extra.extend(str(x) for x in vals if x not in (None, ""))
+                continue
+            st = states.get(k, "set")
+            # 数字字段强转（模型常输出字符串 "5000" → int）
+            if kinds.get(k) == "number" and not isinstance(v, int):
+                try:
+                    v = int(str(v).strip())
+                except Exception:
+                    v = v  # 保持原值，交由 merge/校验处理
+            if st == "excluded":
+                slot_delta[k] = {"value": v, "state": SlotTriState.EXCLUDED.value}
+            elif st == "wildcard":
+                slot_delta[k] = {"value": None, "state": SlotTriState.WILDCARD.value}
+            else:
+                slot_delta[k] = {"value": v, "state": SlotTriState.SET.value}
+        break  # 只处理首个合法工具调用
+    extra = list(dict.fromkeys(extra))
+
+    if slot_delta:
+        intent = "extract"
+    elif raw_content.strip():
+        intent = "qa_or_guide"
+    else:
+        intent = "empty"
+
+    if db is not None:
+        try:
+            db.add(LlmCallLog(
+                conversation_id=(meta or {}).get("conversation_id"),
+                turn=(meta or {}).get("turn"),
+                task="agent_reasoning",
+                input_full={"prompt": sys_prompt, "tools": tool},
+                output_raw={"content": raw_content[:2000], "tool_calls": raw_tool_calls[:5]},
+                model=_settings.deepseek_model,
+                latency_ms=int((_time.perf_counter() - t0) * 1000),
+                tokens=usage,
+                status="ok" if ok else "error",
+            ))
+            await db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("llm_call_log write failed: %s", exc)
+
+    return {"reply_text": raw_content, "slot_delta": slot_delta,
+            "extra_constraints": extra, "intent": intent, "has_tool": has_tool}
+
+
+def reconcile(state: dict) -> dict:
+    """⑤ 状态修剪：Schema 依赖/级联清理（确定性）——失效依赖/旧品类扩展字段清空。"""
+    pt = _product_type(state)
+    active_keys = {f["key"] for f in req_schema.active_fields(state, pt)}
+    for key in list(state.keys()):
+        if key.startswith("_"):
+            continue
+        if key in ("product_type", "extra_constraints"):
+            continue
+        if key not in active_keys:
+            del state[key]
+    return state
+
+
+def weak_close_recap(state: dict) -> str:
+    """SC-22b：档案摘要 + 高亮缺项 + 引导确认（不直接提交）。"""
+    pt = _product_type(state)
+    verdict = req_schema.validate_completion(state, pt)
+    parts = []
+    for f in req_schema.active_fields(state, pt):
+        sv = state.get(f["key"])
+        if sv and sv.get("state") == SlotTriState.SET.value and sv.get("value") not in (None, [], ""):
+            v = sv["value"]
+            parts.append(f"{f['label']}={'、'.join(v) if isinstance(v, list) else v}")
+    extras = state.get("extra_constraints", [])
+    if extras:
+        parts.append(f"扩展需求={'、'.join(extras)}")
+    missing = [req_schema.label_of(k, pt) for k in verdict["missing_hard"]]
+    summary = "好的，当前需求档案：" + ("；".join(parts) if parts else "（空）")
+    if missing:
+        summary += f"。还差：{'、'.join(missing)}"
+    summary += "。确认并提交匹配，还是继续补充？"
+    return summary
+
+
+def help_text() -> str:
+    """SC-32：能力说明 + 拉回。"""
+    return ("我可以帮您梳理代工需求：产品类型、操作系统、接口、认证、起订量、交期、预算等；"
+            "也可以解答与选型相关的领域问题（如 Linux 与 Android 区别）。请告诉我您的需求。")
+
+
+def stall_text() -> str:
+    """熔断：换方式 / 引导人工（SC-37/38/33）。"""
+    return ("看起来我有些没跟上您的需求。要不换种方式描述？例如直接说'我要做5000台机顶盒，Linux系统'；"
+            "或者联系人工客服继续。")

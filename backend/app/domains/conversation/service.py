@@ -136,44 +136,193 @@ async def _load_conv(db: AsyncSession, conversation_id: str) -> Conversation:
     return conv
 
 
+def _bump_stall(state: dict, progress: bool) -> None:
+    """熔断计数：有进展清零，无进展自增（连续无进展 ≥3 触发换方式/引导人工）。"""
+    if progress:
+        state["_stall_counter"] = 0
+    else:
+        state["_stall_counter"] = state.get("_stall_counter", 0) + 1
+
+
 async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageResponse:
+    """对话轮次（代理详细设计 v2 8 章）：意图路由 → 强指令/引导/弱收尾/推理节点 → 合并修剪 → 完成判定 → 追问。"""
     conv = await _load_conv(db, conversation_id)
     state: dict = dict(conv.current_slots or {})
     history: list = list(conv.conversation_history or [])
-
-    # 意图路由
     turn = len(history) + 1
     await _append_event(db, conversation_id, "user_message", {"turn": turn, "content": text[:500]})
-    pending = state.get("_pending") or {}
+
     intent = agent.route_intent(text, None, state)
-    if intent == "done" or intent == "confirm":
-        # 完成/确认由 finish/confirm 接口处理；此处回复引导
-        reply = AssistantMessage(content="请点击「完成需求描述」生成需求档案，或「确认并提交匹配」。", options=[])
+
+    # ① 强命令 → 直接提交（SC-22/25；品类锚点缺失禁止提交）
+    if intent == "confirm_command":
+        if not (state.get("product_type") or {}).get("value"):
+            reply = AssistantMessage(content="请先明确要寻找的产品类型，才能提交匹配。", options=[])
+            return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+        try:
+            req, _run, warnings = await _do_confirm(db, conv)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("auto confirm failed: %s", exc)
+            reply = AssistantMessage(content="提交失败，请重试或联系客服。", options=[])
+            return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+        content = f"✅ 已提交匹配（需求档案 v{req.version}），正在计算匹配中…"
+        if warnings:
+            content += "\n" + warnings[0]
+        history.append({"role": "user", "content": text})
+        history.append({"role": "assistant", "content": content, "options": []})
+        state["_pending"] = {}
+        conv.current_slots = state
+        conv.conversation_history = history
+        await db.commit()
+        await _append_event(db, conversation_id, "confirm",
+                            {"turn": turn, "version": req.version, "request_id": str(req.request_id)})
+        return MessageResponse(assistant_message=AssistantMessage(content=content, options=[]),
+                               demand_points=to_demand_points(state), title=conv.title,
+                               submitted=True, redirect_to=f"/buyer/matches/{req.request_id}", warnings=warnings)
+
+    # ② 帮助 / 引导（B/C 快通道：零 LLM）
+    if intent in ("help", "guide_result", "guide_back"):
+        if intent == "help":
+            content = agent.help_text()
+            evt = "guide"
+        elif intent == "guide_result":
+            content = agent.guide_to_results(_title_of(state))
+            evt = "redirect"
+        else:
+            content = agent.guide_back(_title_of(state))
+            evt = "guard"
+        reply = AssistantMessage(content=content, options=[])
+        history.append({"role": "user", "content": text})
+        history.append({"role": "assistant", "content": content, "options": reply.options})
+        conv.conversation_history = history
+        await db.commit()
+        await _append_event(db, conversation_id, evt, {"turn": turn, "content": text[:300]})
         return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
 
-    # 选项精确命中 → 确定性直写；否则 LLM 解析（完成态"继续补充"直接开放引导，跳过 LLM）
+    # ③ 弱收尾 → 复述 + 引导确认（SC-22b，不直接提交）
+    if intent == "weak_close":
+        recap = agent.weak_close_recap(state)
+        reply = AssistantMessage(content=recap, options=["确认并提交匹配", "继续补充"])
+        history.append({"role": "user", "content": text})
+        history.append({"role": "assistant", "content": recap, "options": reply.options})
+        state["_pending"] = {"key": None, "options": ["确认并提交匹配", "继续补充"]}
+        conv.current_slots = state
+        conv.conversation_history = history
+        await db.commit()
+        await _append_event(db, conversation_id, "recap", {"turn": turn})
+        return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+
+    # ③' SC-05 顾问反推：拿不定主意 → 建议值 + 用户确认（grounded，不替用户决定）
+    if intent == "recommend":
+        profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
+        rec = agent.build_recommendation(state, profile_ctx)
+        if not rec:
+            _nk, _q, _o = agent.decide_question(state)
+            reply = AssistantMessage(content=_q, options=_o)
+            history.append({"role": "user", "content": text})
+            history.append({"role": "assistant", "content": _q, "options": _o})
+            state["_pending"] = {"key": _nk, "options": _o} if _nk else {}
+            conv.current_slots = state
+            conv.conversation_history = history
+            await db.commit()
+            return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+        state["_recommend"] = {"key": rec["key"], "value": rec["value"]}
+        val_s = agent._fmt_val(rec["value"])
+        content = f"看您拿不定主意，我建议：{rec['label']}选「{val_s}」（{rec['reason']}）。要我按此填写吗？"
+        opts = ["按建议填写", "我自己定"] + ([] if rec["key"] == "product_type" else ["跳过"])
+        reply = AssistantMessage(content=content, options=opts)
+        history.append({"role": "user", "content": text})
+        history.append({"role": "assistant", "content": content, "options": opts})
+        state["_pending"] = {"key": None, "options": opts}
+        conv.current_slots = state
+        conv.conversation_history = history
+        await db.commit()
+        await _append_event(db, conversation_id, "recommend", {"turn": turn, "key": rec["key"]})
+        return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+
+    # ③'' SC-05 拒绝建议 → 清空 _recommend，正常追问
+    if intent == "decline_recommend":
+        state.pop("_recommend", None)
+        _nk, _q, _o = agent.decide_question(state)
+        reply = AssistantMessage(content=_q, options=_o)
+        history.append({"role": "user", "content": text})
+        history.append({"role": "assistant", "content": _q, "options": _o})
+        state["_pending"] = {"key": _nk, "options": _o} if _nk else {}
+        conv.current_slots = state
+        conv.conversation_history = history
+        await db.commit()
+        return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+
+    # ④ 选项/建议直写 → 确定性；否则推理节点（Tool Calling 一次推断）
+    pending = state.get("_pending") or {}
     parsed = {"slot_delta": {}, "extra_constraints": []}
-    if pending.get("key") and pending.get("options") and text.strip() in pending.get("options", []):
+    rr_reply = ""
+    if intent == "accept_recommend":
+        # SC-05：采纳建议 → 直写建议值（确定性）
+        rec = state.pop("_recommend", None)
+        if rec and rec.get("key"):
+            state = agent.write_option(state, rec["key"], rec["value"])
+            parsed = {"slot_delta": {rec["key"]: state[rec["key"]]}, "extra_constraints": []}
+        progress = True
+    elif intent == "skip_current":
+        # SC-05：跳过 → 当前待填维度置通配
+        state.pop("_recommend", None)
+        _pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+        _nf = req_schema.next_slot(state, _pt)
+        if _nf:
+            state[_nf["key"]] = {"value": None, "state": SlotTriState.WILDCARD.value}
+            parsed = {"slot_delta": {_nf["key"]: state[_nf["key"]]}, "extra_constraints": []}
+        progress = True
+    elif pending.get("key") and pending.get("options") and text.strip() in pending.get("options", []):
         key = pending["key"]
         val = text.strip()
-        # 数值/枚举：multi 单选时按字符串直写（LLM 负责数值归一）
         state = agent.write_option(state, key, val)
         parsed = {"slot_delta": {key: state[key]}, "extra_constraints": []}
+        progress = True
     elif agent.is_continuation(text) and agent.completion_ready(state):
-        # 完成态下"还有/继续/继续补充"→ 直接进入开放引导（引向 extra_constraints）
-        pass
+        # 完成态"继续补充"→ 开放引导（跳过 LLM）
+        progress = False
     else:
-        # T6.2 画像注入：读用户画像（use_in_prompt 维度）→ Agent 引导不重复询问
         profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
-        parsed = await agent.extract_slots(
+        rr = await agent.agent_reasoning(
             state, text, db=db,
             meta={"conversation_id": conversation_id, "turn": turn, "user_profile": profile_ctx},
         )
-        state = agent.merge_slot(state, parsed.get("slot_delta", {}), parsed.get("extra_constraints", []))
+        rr_reply = rr["reply_text"].strip()
+        state = agent.merge_slot(state, rr["slot_delta"], rr["extra_constraints"])
+        parsed = {"slot_delta": rr["slot_delta"], "extra_constraints": rr["extra_constraints"]}
+        # 无槽位但 LLM 有正文（答疑/引导兜底）→ 直接应答，本轮结束
+        if not rr["slot_delta"] and rr_reply:
+            override = agent.guide_override_for(text)
+            if override:
+                reply_content = (agent.guide_to_results(_title_of(state)) if override == "guide_result"
+                                 else agent.guide_back(_title_of(state)))
+                evt = "redirect" if override == "guide_result" else "guard"
+            else:
+                reply_content = rr_reply[:300]
+                evt = "qa_answer"
+            _bump_stall(state, False)
+            history.append({"role": "user", "content": text})
+            history.append({"role": "assistant", "content": reply_content, "options": []})
+            state["_pending"] = {}
+            conv.current_slots = state
+            conv.conversation_history = history
+            await db.commit()
+            await _append_event(db, conversation_id, evt, {"turn": turn, "content": text[:300]})
+            return MessageResponse(assistant_message=AssistantMessage(content=reply_content, options=[]),
+                                   demand_points=to_demand_points(state), title=conv.title)
+        progress = bool(rr["slot_delta"] or rr["extra_constraints"])
+
     slot_delta = parsed.get("slot_delta", {})
     new_extras = parsed.get("extra_constraints", [])
 
-    # 追加历史（回显：槽位变更 + 本轮新增扩展需求）
+    # 熔断计数（有进展清零）
+    _bump_stall(state, progress)
+
+    # ⑤ 状态修剪 reconcile（merge 后确定性级联清理：依赖失效/旧品类扩展清空）
+    state = agent.reconcile(state)
+
+    # 历史回显（槽位变更 + 扩展需求）
     history.append({"role": "user", "content": text})
     summary = _delta_summary(slot_delta, state)
     if new_extras:
@@ -183,11 +332,13 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
     if slot_delta or new_extras:
         history.append({"role": "assistant", "content": summary})
 
-    # 下一追问 / 完成提示
+    # 下一追问 / 完成提示 / 熔断
     next_key, question, opts = agent.decide_question(state)
     state["_pending"] = {"key": next_key, "options": opts} if next_key else {}
 
-    # 更新标题（一会话一产品）
+    # 混合意图：有槽位且 LLM 有正文 → 正文（答疑/回执）+ 追问合并为一气泡
+    final_content = f"{rr_reply}\n\n{question}" if (rr_reply and slot_delta) else question
+
     title = _title_of(state)
     if conv.title == "新会话" and title != "新会话":
         conv.title = title
@@ -201,7 +352,7 @@ async def message(db: AsyncSession, conversation_id: str, text: str) -> MessageR
     await _append_event(db, conversation_id, "question", {"turn": turn, "question": question[:300], "options": opts})
 
     return MessageResponse(
-        assistant_message=AssistantMessage(content=question, options=opts),
+        assistant_message=AssistantMessage(content=final_content, options=opts),
         demand_points=to_demand_points(state),
         title=conv.title,
     )
@@ -217,6 +368,8 @@ def _delta_summary(delta: dict, state: dict) -> str:
         st = sv.get("state")
         if st == SlotTriState.EXCLUDED.value:
             parts.append(f"不要求{label}")
+        elif st == SlotTriState.WILDCARD.value:
+            parts.append(f"{label}不限")
         else:
             v = sv.get("value")
             parts.append(f"{label}已记录：{'、'.join(v) if isinstance(v, list) else v}")
@@ -230,12 +383,22 @@ async def _next_version(db: AsyncSession, conversation_id: uuid.UUID) -> int:
     return int(res.scalar_one() or 0) + 1
 
 
-async def confirm(db: AsyncSession, conversation_id: str, user_id: str) -> ConfirmResponse:
-    """确认需求档案：生成快照（version 递增）+ match_runs（running）+ 会话关闭。"""
-    conv = await _load_conv(db, conversation_id)
+async def _do_confirm(db: AsyncSession, conv: Conversation) -> tuple[BuyerRequest, MatchRun, list[str]]:
+    """确认提交（SC-22/25）：生成快照（version++）+ match_runs（running）。
+
+    - 品类锚点缺失 → 400（禁止提交）；
+    - 其余硬约束缺失 + 强命令 → 允许但返回显著警示（warnings，不静默），对应 SC-25；
+    - 会话状态重新设计（第 10 章）：不再写 conv.status="confirmed"（提交是可重复事件，会话保持 active）。
+    """
     state = dict(conv.current_slots or {})
     if not (state.get("product_type") or {}).get("value"):
         raise err_400("请先明确要寻找的产品类型")
+    pt = (state.get("product_type") or {}).get("value")
+    verdict = req_schema.validate_completion(state, pt)
+    missing = [req_schema.label_of(k, pt) for k in verdict["missing_hard"]]
+    warnings: list[str] = []
+    if missing:
+        warnings.append("以下需求尚未明确：" + "、".join(missing) + "。已按当前信息提交匹配，可稍后继续补充并重新匹配。")
 
     version = await _next_version(db, conv.conversation_id)
     req = BuyerRequest(
@@ -251,15 +414,22 @@ async def confirm(db: AsyncSession, conversation_id: str, user_id: str) -> Confi
 
     run = MatchRun(request_id=req.request_id, status="running", total_vendors=0, computation_time_ms=0)
     db.add(run)
-    conv.status = "confirmed"
+    # 会话状态重新设计：不写 conv.status（保持 active）
     await db.commit()
-    await _append_event(db, conversation_id, "confirmed", {"version": version, "request_id": str(req.request_id)})
+    await _append_event(db, str(conv.conversation_id), "confirmed",
+                        {"version": version, "request_id": str(req.request_id)})
 
     # 异步画像更新（T3.7，不阻塞 confirm 主流程）
     profile.schedule_profile_update(str(req.request_id), str(conv.conversation_id))
+    return req, run, warnings
 
-    return ConfirmResponse(request_id=str(req.request_id), version=version,
-                           redirect_to=f"/buyer/matches/{req.request_id}")
+
+async def confirm(db: AsyncSession, conversation_id: str, user_id: str) -> ConfirmResponse:
+    """确认需求档案并提交匹配（单端点，SC-22/25）。"""
+    conv = await _load_conv(db, conversation_id)
+    req, _run, warnings = await _do_confirm(db, conv)
+    return ConfirmResponse(request_id=str(req.request_id), version=req.version,
+                           redirect_to=f"/buyer/matches/{req.request_id}", warnings=warnings)
 
 
 async def list_conversations(db: AsyncSession, user_id: str) -> ConversationListResponse:

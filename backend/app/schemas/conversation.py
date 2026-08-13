@@ -40,13 +40,17 @@ class MessageRequest(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    """SSE 流式对话的最终聚合形状；流式逐 token 由 index.ts 用 fetch+ReadableStream 封装（5.4）。
+    """对话轮次最终聚合形状（代理详细设计 v2）。
     demand_points 为当前完整需求点集合（全量返回，前端整体替换）。
-    title 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。"""
+    title 为会话当前标题（=聚焦的产品类型名，未确定时为「新会话」）。
+    submitted/redirect_to/warnings：强命令在聊天内直接提交时返回（SC-22/25），前端据此跳转并展示警示。"""
 
     assistant_message: AssistantMessage
     demand_points: list[DemandPoint] = Field(default_factory=list)
     title: str = "新会话"
+    submitted: bool = False
+    redirect_to: str = ""
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ConfirmRequest(BaseModel):
@@ -58,6 +62,7 @@ class ConfirmResponse(BaseModel):
     request_id: str
     version: int
     redirect_to: str = ""
+    warnings: list[str] = Field(default_factory=list, description="硬约束缺项警示（SC-25，允许提交但显著提示）")
 
 
 # ---- 历史（产品 2.8）----
