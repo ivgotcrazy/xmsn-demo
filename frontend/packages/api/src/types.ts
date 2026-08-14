@@ -166,6 +166,7 @@ export type AssistantMessage = {
   role?: string;
   content: string;
   options?: string[];
+  options_type?: "none" | "single" | "multi" | "actions";
 };
 export type AuditRequest = {
   action: "pass" | "reject";
@@ -246,6 +247,7 @@ export type ConversationMessageItem = {
   content: string;
   error?: boolean;
   options?: string[];
+  options_type?: "none" | "single" | "multi" | "actions";
   created_at?: (string | null);
 };
 export type ConversationMessagesResponse = {
@@ -370,6 +372,7 @@ export type MatchRun = {
 export type MessageRequest = {
   conversation_id: string;
   message: string;
+  clicked_option?: (string | string[] | null);
 };
 export type MessageResponse = {
   assistant_message: AssistantMessage;

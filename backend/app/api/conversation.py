@@ -39,7 +39,8 @@ async def start(
 async def message(
     payload: MessageRequest, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[MessageResponse]:
-    return ApiResponse(data=await conv_service.message(db, payload.conversation_id, payload.message))
+    return ApiResponse(data=await conv_service.message(
+        db, payload.conversation_id, payload.message, payload.clicked_option))
 
 
 @router.post("/confirm", response_model=ApiResponse[ConfirmResponse], summary="确认需求档案并提交匹配（单端点）")

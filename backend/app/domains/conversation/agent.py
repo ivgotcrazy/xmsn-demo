@@ -1,10 +1,11 @@
-"""对话 Agent 核心（代理详细设计 v2 8/9 章）：意图路由 / 推理节点(Tool Calling) / 合并与修剪 / 完成判定 / 追问。
+"""对话 Agent 核心（代理详细设计 v2 8/9 章，v2.1 收敛）：意图判定全在推理节点（LLM），程序只做执行。
 
-路径A（评审确认 2026-08-13）：意图 = f(话语, 状态, 历史, 阶段)。
-- 意图路由 route_intent：确定性层**只拦无歧义命令**（option_click/confirm/help/accept·decline·skip_recommend[状态条件]）
-- 弱收尾/引导(B·C)/推荐(SC-05)/答疑 → 推理节点在完整上下文中判定（classify_turn 结构化 intent）
-- 推理节点 agent_reasoning：双工具（update_requirement_slots + classify_turn）一次推断 reply_text + slot_delta + intent
-- B/C 合规后置保险 guide_override_for（正文强制引导，不参与主路由）
+v2.1（评审定案 2026-08-13）：
+- 意图路由 route_intent：仅 `clicked_option ? option_click : free_text`；**不做任何字符串匹配**（红线6）
+- 推理节点 agent_reasoning：**三工具**（update_requirement_slots / classify_turn / submit_request）一次推断
+  reply_text + slot_delta + intent（extract/qa/guide_result/guide_back/weak_close/recommend/submit/empty）
+- 提交 = UI 按钮（confirm 端点）或 submit_request（LLM 识别提交意图 → 程序执行 _do_confirm 带护栏）
+- 合规（不评价厂商）= 指令约束 + 评测验证；无正则兜底（删 guide_override_for）
 - reconcile 状态修剪（依赖/级联清理）+ 动态 Validator（hard/soft/optional）+ pending_slots 追问
 - 熔断 _stall_counter：连续无进展换方式/引导人工
 """
@@ -53,25 +54,8 @@ EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在�
 CONFIRM_TEXT = "核心需求已明确，确认并提交匹配？还是继续补充？"
 OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「确认并提交匹配」结束。"
 
-# 继续补充的短填充语（完成态下直接开放引导，跳过 LLM）
-_CONTINUATION = ("还有", "继续", "还要", "补充", "其他", "别的", "再来")
-
-# 强命令（明确授权直接提交，SC-22）
-CONFIRM_COMMANDS = ("确认并提交匹配", "确认并提交", "提交匹配", "提交需求", "完成需求", "确认完成")
-
-# B/C 档合规安全覆盖模式（后置保险，不参与主路由；SC-29/34/35）
-_REDIRECT_PAT = re.compile(
-    r"哪家|谁(更好|合适|能|比)|更好|更合适|对比|比一下|比较|"
-    r"推荐.{0,6}(厂商|厂家|家)|这家|那家|A厂|B厂|上面.{0,4}(厂|家)|"
-    r"结果.{0,4}(好|准)|几个厂商", re.I)
-_OFFTOPIC_PAT = re.compile(
-    r"^(你好|您好|在吗|在不在|你是(谁|什么)|今天天气|你会做|你能做|介绍一下你|"
-    r"讲个笑话|什么是物联网|人工智能趋势)", re.I)
-# 明确"看结果"信号（结果查看 → 引导，合规兜底）
-_RESULT_VIEW_PAT = ("看结果", "匹配结果", "结果呢", "结果怎么样", "查结果")
-
-# SC-05 顾问反推：采纳/拒绝/跳过建议（仅 _recommend 存在时的状态条件命令）
-ACCEPT_RECOMMEND_PAT = ("按建议", "采纳", "按推荐", "就按你说的", "按你说的", "按这个")
+# v2.1：删除文本命令/正则常量（红线6，不做字符串匹配语义）——
+# _CONTINUATION / CONFIRM_COMMANDS / _REDIRECT_PAT / _OFFTOPIC_PAT / _RESULT_VIEW_PAT / ACCEPT_RECOMMEND_PAT 已移除。
 # 行业默认配置（无画像/知识时给 grounded 建议值；L2 SC-05）
 _CATEGORY_DEFAULTS: dict[str, dict] = {
     "机顶盒": {"os": ["Linux"], "interfaces": ["网口", "HDMI"], "certifications": ["CE"],
@@ -86,49 +70,14 @@ _CATEGORY_DEFAULTS: dict[str, dict] = {
 _PROFILE_DIM_MAP = {"os": "偏好操作系统", "interfaces": "常用接口", "certifications": "常备认证", "product_type": "行业焦点"}
 
 
-def is_continuation(text: str) -> bool:
-    """是否"想继续补充"的短填充语 → 完成态下直接开放引导（省一次 LLM 调用）。"""
-    t = text.strip()
-    return 0 < len(t) <= 8 and any(w in t for w in _CONTINUATION)
-
-
 def route_intent(message: str | None, clicked_option: str | None, state: dict) -> str:
-    """意图路由（路径A，评审确认 2026-08-13）：只拦**无歧义命令**；弱收尾/引导(B·C)/推荐(SC-05)/答疑
-    由推理节点在完整上下文中判定（intent 结构化输出）。
+    """意图路由（v2.1 收敛，红线6）：仅区分**UI 动作** vs **自由文本**；不做任何字符串匹配。
 
-    返回：option_click / confirm_command / help / accept_recommend / decline_recommend / skip_current / free_text
+    返回：option_click（点击=UI 动作，确定性执行） / free_text（一切自由文本 → 推理节点判定语义）
     """
     if clicked_option:
         return "option_click"
-    if message is None:
-        return "confirm_command"
-    m = message.strip()
-    if not m:
-        return "free_text"
-    # 强命令（明确授权）→ 直接提交（SC-22/25）
-    if re.match(r"^/done$", m, re.I) or any(c in m for c in CONFIRM_COMMANDS):
-        return "confirm_command"
-    if m in ("帮助", "help", "?") or m.startswith("/help"):
-        return "help"
-    # 采纳/拒绝/跳过建议（仅 _recommend 存在时的状态条件命令，无歧义）
-    if state.get("_recommend"):
-        if any(w in m for w in ACCEPT_RECOMMEND_PAT):
-            return "accept_recommend"
-        if m in ("我自己定", "我自己选", "我自己说"):
-            return "decline_recommend"
-        if m in ("跳过", "先不填", "不限"):
-            return "skip_current"
-    # 其余一律 free_text → 推理节点（语义由上下文中判定，不按关键词分流）
     return "free_text"
-
-
-def guide_override_for(text: str) -> str | None:
-    """B/C 合规后置保险（不参与主路由）：原文强命中厂商/结果/闲聊 → 强制引导，防模型越界评价厂商。"""
-    if _REDIRECT_PAT.search(text) or any(w in text for w in _RESULT_VIEW_PAT):
-        return "guide_result"
-    if _OFFTOPIC_PAT.match(text):
-        return "guide_back"
-    return None
 
 
 def guide_to_results(category: str | None = None) -> str:
@@ -198,17 +147,13 @@ def build_recommendation(state: dict, profile_ctx: str = "") -> dict | None:
 
 
 def write_option(state: dict, key: str, value) -> dict:
-    """选项点击直写（确定性，三态 SET）。多选合并。"""
+    """选项点击直写（确定性，三态 SET）。多选=整集合替换（checkbox 全量提交，可移除）。"""
     pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
     f = next((x for x in req_schema.fields_for(pt) if x["key"] == key), None)
-    prev = (state.get(key) or {}).get("value") if state.get(key) else None
     if f and f["kind"] == "multi":
-        combined = list(value) if isinstance(value, list) else [value]
-        if isinstance(prev, list):
-            for v in prev:
-                if v not in combined:
-                    combined.append(v)
-        state[key] = {"value": combined, "state": SlotTriState.SET.value}
+        # 多选：以本次选择为最终完整集合（不再追加旧值，支持取消勾选移除）
+        state[key] = {"value": list(value) if isinstance(value, list) else [value],
+                      "state": SlotTriState.SET.value}
     else:
         state[key] = {"value": value, "state": SlotTriState.SET.value}
     return state
@@ -218,7 +163,7 @@ def merge_slot(state: dict, slot_delta: dict, extra: list[str] | None = None) ->
     """三态合并（LLD 6.4）：delta 覆盖/合并当前。
 
     - 排除（EXCLUDED）→ 置排除（负向过滤）
-    - 多选：merge=replace 覆盖旧值（纠正）；默认 append 去重追加
+    - 多选：默认**整集合替换**（LLM 输出完整最终集，规则 A1）；`__merge__` 可覆盖为 append（补充）/ remove（移除项）
     - 自创字段（不在当前品类 Schema）→ 归入 extra_constraints（UC-10），不入固定槽位
     """
     cur_pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
@@ -247,14 +192,23 @@ def merge_slot(state: dict, slot_delta: dict, extra: list[str] | None = None) ->
         else:
             prev = (state.get(key) or {}).get("value")
             if isinstance(val, list):
-                if sv.get("merge", "append") == "replace":
-                    combined = list(val)  # 纠正：覆盖旧值
-                else:
+                # 多选默认 REPLACE（LLM 输出完整最终集）；__merge__ 覆盖为 append / remove
+                m = sv.get("merge", "replace")
+                if m == "append":
                     combined = list(val)
                     if isinstance(prev, list):
                         for v in prev:
                             if v not in combined:
                                 combined.append(v)
+                elif isinstance(m, dict) and "remove" in m:
+                    removed = set(m["remove"])
+                    combined = list(val)
+                    if isinstance(prev, list):
+                        for v in prev:
+                            if v not in combined and v not in removed:
+                                combined.append(v)
+                else:  # replace：整字段替换为本次值
+                    combined = list(val)
                 state[key] = {"value": combined, "state": SlotTriState.SET.value}
             else:
                 state[key] = {"value": val, "state": SlotTriState.SET.value}
@@ -342,30 +296,32 @@ def completion_ready(state: dict) -> bool:
     return req_schema.validate_completion(state, _product_type(state))["done"]
 
 
-def decide_question(state: dict) -> tuple[str | None, str, list[str]]:
-    """返回 (追问字段 key|None, 文案, 选项)；完成则 None + 确认/开放引导；熔断触发给换方式话术。"""
+def decide_question(state: dict) -> tuple[str | None, str, list[str], str]:
+    """返回 (追问字段 key|None, 文案, 选项, options_type)；完成则 None + 确认/开放引导；熔断触发给换方式话术。"""
+    actions = ["确认并提交匹配", "继续补充"]
     pt = _product_type(state)
     # 熔断：连续无进展 ≥3 轮 → 换方式/引导人工（SC-37/38/33）
     if state.get("_stall_counter", 0) >= 3:
-        return None, stall_text(), ["确认并提交匹配", "继续补充"]
+        return None, stall_text(), actions, "actions"
     if not pt:
         f = req_schema.FIXED_FIELDS[0]  # product_type
-        return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options", []))
+        return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options", [])), "single"
     verdict = req_schema.validate_completion(state, pt)
     if verdict["done"]:
         # 仅首次提示确认；再次进入完成态 → 开放引导（不再重复 confirm）
         if state.get("_confirm_prompted"):
-            return None, OPEN_GUIDE_TEXT, ["确认并提交匹配", "继续补充"]
+            return None, OPEN_GUIDE_TEXT, actions, "actions"
         state["_confirm_prompted"] = True
-        return None, CONFIRM_TEXT, ["确认并提交匹配", "继续补充"]
+        return None, CONFIRM_TEXT, actions, "actions"
     nf = req_schema.next_slot(state, pt)
     if not nf:
-        return None, OPEN_GUIDE_TEXT, ["确认并提交匹配", "继续补充"]
+        return None, OPEN_GUIDE_TEXT, actions, "actions"
     opts = list(nf.get("options", []))
     level = nf.get("level", req_schema.LEVEL_SOFT)
     prefix = "（可选）" if level == req_schema.LEVEL_OPTIONAL else ""
     question = f"{prefix}请问您需要哪些{nf['label']}？" if nf["kind"] == "multi" else f"{prefix}请填写{nf['label']}："
-    return nf["key"], question, opts
+    otype = "multi" if nf.get("kind") == "multi" else ("single" if opts else "none")
+    return nf["key"], question, opts, otype
 
 
 # ---- 代理详细设计 v2 8/9：推理节点 / 状态修剪 / 引导模板 ----
@@ -373,13 +329,16 @@ def decide_question(state: dict) -> tuple[str | None, str, list[str]]:
 _MD_PAT = re.compile(r"(\*\*|__|`|#{1,6}\s*|^\s*\d+[\.、]|\* |\- )", re.M)
 
 
-def _clean_text(s: str, limit: int = 150) -> str:
-    """文本卫生：去 markdown 标记、折叠空白、限长（答疑/引导/建议正文统一用）。"""
+def _clean_text(s: str) -> str:
+    """文本卫生：去 markdown 标记、折叠空白（答疑/引导/建议正文统一用）。
+
+    不做长度截断——回复是否简短由提示词约束模型（v2.1 原则：大模型=大脑，程序只执行；
+    截断会腰斩模型语义产出，属程序篡改模型输出；异常兜底后续再议）。
+    """
     if not s:
         return ""
     t = _MD_PAT.sub("", s)
-    t = " ".join(t.split()).strip()
-    return t[:limit]
+    return " ".join(t.split()).strip()
 
 
 # 非填槽轮意图分类工具（路径A：语义判定下沉推理节点）
@@ -397,10 +356,22 @@ CLASSIFY_TOOL = {
                 "intent": {"type": "string",
                            "enum": ["qa", "guide_result", "guide_back", "weak_close", "recommend"]},
                 "reply_text": {"type": "string",
-                               "description": "给用户的一句话回复（答疑/引导/复述/建议，限150字，勿用markdown标记）"},
+                               "description": "给用户的一句话回复（答疑/引导/复述/建议，简短3~5句、答完拉回主线，勿用markdown标记）"},
             },
             "required": ["intent", "reply_text"],
         },
+    },
+}
+
+
+# 提交意图工具（v2.1：LLM 识别"要结束并提交" → 程序执行 _do_confirm 带护栏）
+SUBMIT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "submit_request",
+        "description": "仅当用户明确表示要结束需求整理并提交匹配（如「确认并提交匹配」「可以提交了」「帮我提交吧」）时调用；"
+                       "程序将生成需求档案快照并触发匹配。若用户只是在确认某个槽位值（如「确认接口要USB」），不要调用。",
+        "parameters": {"type": "object", "properties": {}, "required": []},
     },
 }
 
@@ -426,6 +397,9 @@ def build_tool_schema(active_fields: list[dict]) -> dict:
     props["__states__"] = {"type": "object",
                            "description": "三态覆盖（仅出现时才写）：{'<key>':'excluded'} 排除某能力、"
                                           "{'<key>':'wildcard'} 不限；未出现 = 正常指定 set。"}
+    props["__merge__"] = {"type": "object",
+                           "description": "多选字段覆盖语义（可选）：{'<key>':'append'} 追加（补充某项，保留旧值）；"
+                                          "{'<key>':{'remove':['值1']}} 从当前移除指定项；缺省=整字段替换（输出完整集合）。"}
     return {
         "type": "function",
         "function": {
@@ -461,9 +435,9 @@ def _allowed_lines(active_fields: list[dict]) -> str:
 async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None = None) -> dict:
     """推理节点（④）：一次推断 reply_text + tool_call(slot_delta/extra) + intent（Tool Calling）。
 
-    返回 {reply_text, slot_delta, extra_constraints, intent, has_tool}；
-    intent: extract（有槽位）/ qa·guide_result·guide_back·weak_close·recommend（classify_turn 结构化判定）/
-           empty（异常/空）。reply_text 已去 markdown 并限长。
+    返回 {reply_text, slot_delta, extra_constraints, intent, has_tool, submit_request}；
+    intent: extract（有槽位）/ submit（submit_request）/ qa·guide_result·guide_back·weak_close·recommend（classify_turn 结构化判定）/
+           empty（异常/空）。reply_text 已去 markdown 并折叠空白（不截断）。
     """
     import time as _time
     from app.core.config import settings as _settings
@@ -498,6 +472,10 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         "# 当前已填槽位（三态）\n" + _render_slots(state) + "\n"
         "# 工具选择规则\n"
         "A. 用户本轮给出了明确槽位信息（含补充/纠正/排除/不限）→ 调用 update_requirement_slots 写入；可在正文给简短回执。\n"
+        "A1. **多选字段（os/interfaces/certifications 等）**：纠正/重新声明/排除某项 → 输出**最终完整集合**整体替换——"
+        "如「只要Android」→ os=['Android']；「把Linux去掉」且当前 ['Linux','Android'] → os=['Android']。"
+        "补充/追加某项（如「再加RTOS」）→ 可仅给新增项并设 __merge__:{'<key>':'append'}（保留旧值）。"
+        "务必：不遗漏已有值、不添加用户未提到的值。\n"
         "B. 用户本轮没有槽位信息，而是：\n"
         "   - 领域知识提问（Linux与Android区别等）→ classify_turn(intent=qa)，正文≤3~5句、可注明「依据：…」、末尾引导回槽位；\n"
         "   - 询问厂商比较/推荐厂商/查匹配结果 → classify_turn(intent=guide_result)，正文不评价厂商；\n"
@@ -507,6 +485,11 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         "C. 无论是否调用工具，都要在正文（reply_text 或 content）给出一句简短自然回应，勿用 markdown 标记。\n"
         "D. 若用户**同时**给出槽位信息和提问/推荐请求（如「放在家庭中使用，你推荐什么工艺？」）→ "
         "可同时调用 update_requirement_slots（写入槽位，如 application_scenario=家庭）和 classify_turn（回答问题）。\n"
+        "E. 用户明确表示要结束并提交匹配（如「确认并提交匹配」「可以提交了」「帮我提交吧」）→ 调用 submit_request；"
+        "勿与填槽混淆（「确认接口要USB」是确认槽位值，应调 update_requirement_slots）。\n"
+        "F. **一会话一产品（SC-31）**：若「当前品类」已确定，而用户表达了**切换到另一产品类型**的意图"
+        "（如当前机顶盒、改做智能音箱）→ 不要在 update_requirement_slots 里修改 product_type，也不写新品类专属字段；"
+        "正文用引导语提示：检测到您提到「新品类」，当前会话已聚焦「原品类」，如需咨询新品类建议新建会话。\n"
         + (knowledge or "") + "\n"
         + ("# 当前用户画像\n" + ((meta or {}).get("user_profile") or "（无）") + "\n")
     )
@@ -519,7 +502,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         res = await chat_tool(
             [{"role": "system", "content": sys_prompt},
              {"role": "user", "content": message[:2000]}],
-            [tool, CLASSIFY_TOOL], tool_choice="auto", temperature=0.1, max_tokens=1024,
+            [tool, CLASSIFY_TOOL, SUBMIT_TOOL], tool_choice="auto", temperature=0.1, max_tokens=1024,
         )
         raw_content = res.content
         raw_tool_calls = res.tool_calls
@@ -531,6 +514,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
     slot_delta: dict = {}
     extra: list[str] = []
     has_tool = False
+    submit_request = False
     classify_intent: str | None = None
     classify_reply = ""
     allowed_keys = {f["key"] for f in active} | {"product_type"}
@@ -538,6 +522,9 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
     for tc in raw_tool_calls:
         name = tc["name"]
         args = tc["arguments"] or {}
+        if name == "submit_request":
+            submit_request = True
+            continue
         if name == "classify_turn":
             ci = args.get("intent")
             if ci in ("qa", "guide_result", "guide_back", "weak_close", "recommend"):
@@ -550,8 +537,9 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
             continue
         has_tool = True
         states = args.get("__states__") or {}
+        merges = args.get("__merge__") or {}
         for k, v in args.items():
-            if k == "__states__":
+            if k in ("__states__", "__merge__"):
                 continue
             if k == "extra_constraints":
                 ex = v if isinstance(v, list) else [v]
@@ -574,12 +562,16 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
             elif st == "wildcard":
                 slot_delta[k] = {"value": None, "state": SlotTriState.WILDCARD.value}
             else:
-                slot_delta[k] = {"value": v, "state": SlotTriState.SET.value}
+                mg = merges.get(k)
+                slot_delta[k] = {"value": v, "state": SlotTriState.SET.value,
+                                 **({"merge": mg} if mg else {})}
     extra = list(dict.fromkeys(extra))
 
-    # 意图判定（路径A）：填槽 > 结构化分类 > 兜底
+    # 意图判定（v2.1）：填槽 > 提交 > 结构化分类 > 兜底
     if slot_delta:
         intent = "extract"
+    elif submit_request:
+        intent = "submit"
     elif classify_intent:
         intent = classify_intent
     elif raw_content.strip():
@@ -596,7 +588,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
                 conversation_id=(meta or {}).get("conversation_id"),
                 turn=(meta or {}).get("turn"),
                 task="agent_reasoning",
-                input_full={"prompt": sys_prompt, "tools": [tool, CLASSIFY_TOOL]},
+                input_full={"prompt": sys_prompt, "tools": [tool, CLASSIFY_TOOL, SUBMIT_TOOL]},
                 output_raw={"content": raw_content[:2000], "tool_calls": raw_tool_calls[:5]},
                 model=_settings.deepseek_model,
                 latency_ms=int((_time.perf_counter() - t0) * 1000),
@@ -608,7 +600,24 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
             logger.warning("llm_call_log write failed: %s", exc)
 
     return {"intent": intent, "reply_text": reply_text, "slot_delta": slot_delta,
-            "extra_constraints": extra, "has_tool": has_tool}
+            "extra_constraints": extra, "has_tool": has_tool, "submit_request": submit_request}
+
+
+def category_switch(state: dict, slot_delta: dict) -> tuple[str, str] | None:
+    """SC-31 一会话一产品：会话已聚焦品类 cur，推理节点提出不同品类 new → 返回 (cur, new)。
+
+    语义判定由推理节点完成（slot_delta.product_type 是其结构化输出）；此处仅执行不变式——
+    不覆盖品类、不写入新品类扩展字段，提示新建会话（产品原型设计 02A 关键交互⑥）。
+    None = 无冲突（正常填槽）。
+    """
+    cur = _product_type(state)
+    if not cur:
+        return None
+    d_pt = (slot_delta or {}).get("product_type")
+    new = d_pt.get("value") if isinstance(d_pt, dict) else None
+    if not new or new == cur:
+        return None
+    return (cur, new)
 
 
 def reconcile(state: dict) -> dict:

@@ -15,7 +15,10 @@ class ConversationStartRequest(BaseModel):
 class AssistantMessage(BaseModel):
     role: str = "assistant"
     content: str
-    options: list[str] = Field(default_factory=list, description="可选回答（槽位候选）")
+    options: list[str] = Field(default_factory=list, description="可选回答（槽位候选 / 动作按钮）")
+    options_type: Literal["none", "single", "multi", "actions"] = "none"
+    """候选展示类型（v2.1）：none=无选项（文本输入）；single=单选槽位（点选即提交）；
+    multi=多选槽位（勾选+确认按钮提交）；actions=流程动作按钮（确认并提交匹配/继续补充/按建议填写/我自己定/跳过，点选即提交）。"""
 
 
 class DemandPoint(BaseModel):
@@ -37,6 +40,8 @@ class ConversationStartResponse(BaseModel):
 class MessageRequest(BaseModel):
     conversation_id: str
     message: str
+    clicked_option: str | list[str] | None = Field(
+        default=None, description="UI 选项/按钮点击（v2.1）：单选=str；多选=list[str]；无点击（自由文本）=null")
 
 
 class MessageResponse(BaseModel):
@@ -87,6 +92,7 @@ class ConversationMessageItem(BaseModel):
     content: str
     error: bool = False
     options: list[str] = Field(default_factory=list, description="仅末条助手消息可带候选选项")
+    options_type: Literal["none", "single", "multi", "actions"] = "none"
     created_at: datetime | None = None
 
 

@@ -46,10 +46,34 @@ def _norm_slot(sv):
     return sv, "set"
 
 
+_EXTRA_CONSTRAINTS_LABEL = "扩展需求"
+
+
+def _param_label(key: str, product_type: str | None) -> str:
+    """参数标签：schema 固定/品类扩展优先；extra_constraints 特例映射（解释按需求字段 key 生成）。"""
+    if key == "extra_constraints":
+        return _EXTRA_CONSTRAINTS_LABEL
+    return req_schema.label_of(key, product_type)
+
+
+def _fmt_value(v) -> str:
+    """值格式化：列表 → 中文顿号连接（解释可能产出 ['外壳黑色','送货上门'] 原始列表）。"""
+    if v is None:
+        return "未声明"
+    if isinstance(v, list):
+        return "、".join(str(x) for x in v if x not in (None, ""))
+    return str(v)
+
+
 def _demand_points(demand: dict) -> list[DemandPoint]:
     """structured_demand → DemandPoint 列表（02B 左栏展示）。"""
+    pt_slot = _norm_slot((demand or {}).get("product_type"))
+    product_type = pt_slot[0] if pt_slot[1] == "set" else None
     pts: list[DemandPoint] = []
     for k, sv in (demand or {}).items():
+        # extra_constraints 为纯 list（非槽位），由下方 extra 循环逐条展开，避免重复
+        if k == "extra_constraints":
+            continue
         v, st = _norm_slot(sv)
         if st != "set":
             continue
@@ -59,20 +83,33 @@ def _demand_points(demand: dict) -> list[DemandPoint]:
             v = [str(x) for x in v]
         else:
             v = str(v)
-        pts.append(DemandPoint(key=k, label=req_schema.label_of(k, None),
+        pts.append(DemandPoint(key=k, label=_param_label(k, product_type),
                                value=v, confidence=1.0))
     extra = demand.get("extra_constraints")
     if isinstance(extra, list):
         for c in extra:
-            pts.append(DemandPoint(key="extra_constraints", label="扩展需求",
+            pts.append(DemandPoint(key="extra_constraints", label=_EXTRA_CONSTRAINTS_LABEL,
                                    value=str(c), confidence=0.9))
     return pts
 
 
-def _match_param(j: dict) -> MatchParam:
+def _dedup_params(items: list[dict] | None) -> list[dict]:
+    """按 param key 去重（保留首个）——防御历史数据中 explain 双追加产生的重复行。"""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for j in items or []:
+        k = j.get("param")
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append(j)
+    return out
+
+
+def _match_param(j: dict, product_type: str | None = None) -> MatchParam:
     """ParamJudgement/解释条目 → 前端 MatchParam（label 规范化 + note + source 溯源）。"""
-    dv = j.get("demand_value")
-    sv = j.get("supply_value") or "未声明"
+    dv = _fmt_value(j.get("demand_value"))
+    sv = _fmt_value(j.get("supply_value")) or "未声明"
     value = f"需求 {dv} / 厂商 {sv}"
     note = j.get("note")
     if note:
@@ -81,7 +118,7 @@ def _match_param(j: dict) -> MatchParam:
     src = src if isinstance(src, dict) else {}
     return MatchParam(
         key=j["param"],
-        label=req_schema.label_of(j["param"], None),
+        label=_param_label(j["param"], product_type),
         value=value,
         # missing（厂商未声明）语义并入 partial（需协商）；解释内部枚举 4 值，契约 3 值归一
         verdict="partial" if j.get("verdict") == "missing" else j["verdict"],
@@ -325,6 +362,12 @@ async def detail(db: AsyncSession, match_id: str) -> MatchDetailResponse:
     if not mr:
         raise err_404("匹配结果不存在")
     vendor = await db.get(Vendor, mr.vendor_id)
+    # 品类扩展字段（如 mic_array）标签依赖 product_type；extra_constraints 特例映射
+    product_type = None
+    req = await db.get(BuyerRequest, mr.request_id)
+    if req and (req.structured_demand or {}).get("product_type"):
+        pt = req.structured_demand["product_type"]
+        product_type = pt.get("value") if isinstance(pt, dict) else pt
     # M5 异步解释：ai_comment 生成后 ready；未生成返回 pending（前端轮询显示"理由生成中…"）
     ready = mr.ai_comment is not None
     return MatchDetailResponse(
@@ -332,9 +375,9 @@ async def detail(db: AsyncSession, match_id: str) -> MatchDetailResponse:
         request_id=str(mr.request_id),
         vendor_id=str(mr.vendor_id),
         company_name=vendor.company_name if vendor else "未知厂商",
-        matched_params=[_match_param(j) for j in (mr.matched_params or [])],
-        partial_params=[_match_param(j) for j in (mr.partial_params or [])],
-        unmatched_params=[_match_param(j) for j in (mr.unmatched_params or [])],
+        matched_params=[_match_param(j, product_type) for j in _dedup_params(mr.matched_params)],
+        partial_params=[_match_param(j, product_type) for j in _dedup_params(mr.partial_params)],
+        unmatched_params=[_match_param(j, product_type) for j in _dedup_params(mr.unmatched_params)],
         ai_comment=mr.ai_comment,
         explanation_status="ready" if ready else "pending",
     )

@@ -31,6 +31,7 @@ const router = useRouter()
 
 const messages = ref<{ role: "assistant" | "user"; content: string; error?: boolean; created_at?: string }[]>([])
 const options = ref<string[]>([])
+const optionsType = ref<"none" | "single" | "multi" | "actions">("none")
 const input = ref("")
 // 前端「当前需求」：基于会话历史萃取的需求点集合（不感知 schema）
 const demandPoints = ref<DemandPoint[]>([])
@@ -148,6 +149,7 @@ async function openConversation(id: string): Promise<void> {
     }))
     const last = [...(res.messages ?? [])].reverse().find((m) => m.role === "assistant")
     options.value = last?.options ?? []
+    optionsType.value = last?.options_type ?? "none"
     demandPoints.value = res.demand_points ?? []
     version.value = res.version ?? null
     await loadRecords()
@@ -167,6 +169,7 @@ async function newSession(): Promise<void> {
     conversationId.value = res.conversation_id
     messages.value = [{ role: "assistant", content: res.first_message.content, created_at: new Date().toISOString() }]
     options.value = res.first_message.options ?? []
+    optionsType.value = res.first_message.options_type ?? "none"
     demandPoints.value = res.demand_points ?? []
     version.value = null
     records.value = []
@@ -194,7 +197,7 @@ function onEnter(e: KeyboardEvent): void {
   }
 }
 
-async function send(text?: string): Promise<void> {
+async function send(text?: string, clickedOption?: string | string[] | null): Promise<void> {
   const content = (text ?? input.value).trim()
   if (!content || sending.value) return
   messages.value.push({ role: "user", content, created_at: new Date().toISOString() })
@@ -205,9 +208,11 @@ async function send(text?: string): Promise<void> {
     const res = await conversationMessage({
       conversation_id: conversationId.value,
       message: content,
+      clicked_option: clickedOption ?? null,
     })
     messages.value.push({ role: "assistant", content: res.assistant_message.content, created_at: new Date().toISOString() })
     options.value = res.assistant_message.options ?? []
+    optionsType.value = res.assistant_message.options_type ?? "none"
     // 前端「当前需求」：全量替换为萃取出的需求点集合
     demandPoints.value = res.demand_points ?? []
     // 强命令在聊天内直接提交（SC-22/25）：展示警示并跳转匹配结果页
@@ -232,18 +237,22 @@ async function send(text?: string): Promise<void> {
   }
 }
 
-function pick(opt: string): void {
-  // "确认并提交匹配"直接提交（右侧按钮随时可提交）；"继续补充"继续对话
-  if (opt === "确认并提交匹配") {
+function pick(value: string | string[]): void {
+  // "确认并提交匹配"直接提交（单端点）；"继续补充"继续对话；多选提交数组；单选/动作提交单值
+  if (typeof value === "string" && value === "确认并提交匹配") {
     void confirm()
     return
   }
-  if (opt === "继续补充") {
+  if (typeof value === "string" && value === "继续补充") {
     options.value = []
-    void send("继续补充") // 通知后端进入"补充模式"，完成态下回开放引导（不再重复 confirm）
+    void send("继续补充", "继续补充") // 点击=UI 动作 → 后端确定性开放引导
     return
   }
-  input.value = opt
+  if (Array.isArray(value)) {
+    void send(value.join("、"), value) // 多选：确定性直写（clicked_option=list）
+    return
+  }
+  void send(value, value) // 单选/动作：点击即提交
 }
 
 async function confirm(): Promise<void> {
@@ -386,6 +395,7 @@ onMounted(() => {
                 <OptionButtonGroup
                   v-if="m.role === 'assistant' && !m.error && i === messages.length - 1"
                   :options="options"
+                  :options-type="optionsType"
                   @select="pick"
                 />
               </template>

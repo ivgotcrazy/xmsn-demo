@@ -2384,7 +2384,18 @@
             },
             "type": "array",
             "title": "Options",
-            "description": "可选回答（槽位候选）"
+            "description": "可选回答（槽位候选 / 动作按钮）"
+          },
+          "options_type": {
+            "type": "string",
+            "enum": [
+              "none",
+              "single",
+              "multi",
+              "actions"
+            ],
+            "title": "Options Type",
+            "default": "none"
           }
         },
         "type": "object",
@@ -2858,6 +2869,17 @@
             "type": "array",
             "title": "Options",
             "description": "仅末条助手消息可带候选选项"
+          },
+          "options_type": {
+            "type": "string",
+            "enum": [
+              "none",
+              "single",
+              "multi",
+              "actions"
+            ],
+            "title": "Options Type",
+            "default": "none"
           },
           "created_at": {
             "anyOf": [
@@ -3632,6 +3654,24 @@
           "message": {
             "type": "string",
             "title": "Message"
+          },
+          "clicked_option": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clicked Option",
+            "description": "UI 选项/按钮点击（v2.1）：单选=str；多选=list[str]；无点击（自由文本）=null"
           }
         },
         "type": "object",
