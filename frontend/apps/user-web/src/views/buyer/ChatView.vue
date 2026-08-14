@@ -3,7 +3,7 @@
  * 02A 需求对话 Agent（原型）：顶部标题栏 + 新建/我的会话，底部输入栏 + "确认并提交匹配"（单端点），
  * 右侧"当前需求"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
  */
-import { h, onMounted, ref } from "vue"
+import { h, nextTick, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { NButton, NInput, NPopconfirm, NTag, useMessage } from "naive-ui"
 
@@ -51,6 +51,20 @@ const recordsCollapsed = ref(false)
 const attachments = ref<{ name: string; fileId: string }[]>([])
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// 聊天体验：①消息列表自动跟随最新（滚动到底）；②发送后恢复输入焦点（sending 期间 disabled 会夺焦）
+const msgListRef = ref<HTMLElement | null>(null)
+const inputRef = ref<{ focus: () => void } | null>(null)
+
+function scrollToBottom(): void {
+  void nextTick(() => {
+    const el = msgListRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+// flush:"post"：DOM 渲染后执行——消息列表 div 仅在 loading=false 时才存在（v-else），
+// 需同时 watch loading 翻转，否则加载时 msgListRef 为 null 导致首次滚动被跳过
+watch(() => [messages.value.length, loading.value], scrollToBottom, { flush: "post" })
 
 function chooseAttachment(): void {
   fileInput.value?.click()
@@ -234,6 +248,8 @@ async function send(text?: string, clickedOption?: string | string[] | null): Pr
     messages.value.push({ role: "assistant", content: "发送失败，请重试", error: true })
   } finally {
     sending.value = false
+    // 输入焦点恢复：sending 置 disabled 会夺焦，请求结束重新聚焦以便连续输入
+    void nextTick(() => inputRef.value?.focus())
   }
 }
 
@@ -388,7 +404,7 @@ onMounted(() => {
         <div class="chat-page__main">
           <div class="chat-page__panel">
             <div v-if="loading" class="chat-page__empty">对话初始化中…</div>
-            <div v-else class="chat-page__messages">
+            <div v-else ref="msgListRef" class="chat-page__messages">
               <template v-for="(m, i) in messages">
                 <div v-if="showTimeDivider(i)" class="chat-page__time-divider">{{ formatDividerTime(m.created_at) }}</div>
                 <ChatBubble :role="m.role" :content="m.content" :error="m.error" />
@@ -414,6 +430,7 @@ onMounted(() => {
                   </NTag>
                 </div>
                 <NInput
+                  ref="inputRef"
                   v-model:value="input"
                   type="textarea"
                   :bordered="false"
