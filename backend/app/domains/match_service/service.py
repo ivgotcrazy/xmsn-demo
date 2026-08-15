@@ -208,9 +208,11 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
         rid = uuid.UUID(request_id)
     except ValueError:
         raise err_404("需求档案不存在")
+    
     req = await db.get(BuyerRequest, rid)
     if not req or req.deleted_at is not None:
         raise err_404("需求档案不存在")
+    
     demand = req.structured_demand or {}
     run = await _run_of(db, rid)
 
