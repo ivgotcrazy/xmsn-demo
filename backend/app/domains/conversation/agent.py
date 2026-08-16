@@ -21,10 +21,17 @@ from app.llm.client import chat, chat_tool
 
 logger = logging.getLogger("xmsn.agent")
 
-EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在描述代工需求（可能是补充、纠正或排除某项能力）。
+EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在描述**代工制造**需求（要做某产品找代工厂）。
+**代工锚定**：用户描述的产品/设备名（如智能音箱、语音助手、机顶盒）是要**委托代工制造的整机**，按品类/制造维度萃取；
+不要把用户当服务/软件购买者。正在描述代工需求（可能是补充、纠正或明确某项能力要求）。
 请从用户消息中提取/更新需求槽位。规则：仅在消息明确提到的槽位才输出；对已有值：补充则合并、纠正则覆盖、
-排除（如"不要XX""排除XX""不要求XX"）则标记 excluded；无法确定的语义放 extra_constraints；不要编造。
+**不要X（排除某项能力）**：作为需求点语义处理（如"不要HDMI"→ interfaces 值不含 HDMI；或并入 extended 描述），不设排除标记；
+无法归入固定槽位的自由需求（如"外壳黑色""送货上门"）放 extended（结构化）；不要编造。
 可参考行业背景知识做出更专业的槽位值归一（如别名→标准名）。
+
+**strictness（D7 两档）**：每个写入的槽位都要给出 strictness——
+"必须/一定要/只要"→ strict（硬性要求）；"最好/优先/希望/倾向"→ best-effort（尽力）；默认 best-effort。
+用户强调重要性（"这个很重要"）→ 提升为 strict。
 
 # 槽位 Schema（当前品类：{category}）
 {fields}
@@ -36,23 +43,24 @@ EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在�
 # 输出 JSON（严格，只含本次变更）
 {{
   "slot_delta": {{
-    "os": {{"value": ["Linux", "Android"], "state": "set"}},
-    "interfaces": {{"value": [], "state": "excluded"}},
-    "moq": {{"value": 5000, "state": "set"}}
+    "os": {{"value": ["Linux", "Android"], "strictness": "best-effort"}},
+    "moq": {{"value": 5000, "strictness": "strict"}}
   }},
-  "extra_constraints": ["外壳黑色"]
+  "extended": [{{"label": "外观", "value": "外壳黑色", "strictness": "strict"}}]
 }}
 
 # 纠正规则：若用户是纠正已有值（如"改成XX""不对，是XX"），对该字段输出 "merge": "replace"（覆盖旧值）；
-# 否则默认追加合并（多选去重）。排除（"不要XX"）用 state=excluded。
+# 否则默认追加合并（多选去重）。补充某项 → "merge": "append"。
 
 # 用户消息
 {message}
 """
 
 # 完成态 confirm / 开放引导文案（统一"确认并提交匹配"标签 + 开放引导）
-CONFIRM_TEXT = "核心需求已明确，确认并提交匹配？还是继续补充？"
+# D12：门槛达成（品类 + ≥1 需求点）→ 不再提示"核心需求已明确"（低门槛，语义误导），气泡正文用需求回执，仅显示按钮
 OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「确认并提交匹配」结束。"
+# D11/D12：门槛未达成（仅品类、0 需求点）时的开放引导——不逐维度模板追问，交由 LLM 自然引导
+NEED_POINTS_TEXT = "好的，您已选择品类。请继续补充至少 1 个具体需求点（如操作系统、认证、起订量、交期等），或直接描述您的代工需求。"
 
 # v2.1：删除文本命令/正则常量（红线6，不做字符串匹配语义）——
 # _CONTINUATION / CONFIRM_COMMANDS / _REDIRECT_PAT / _OFFTOPIC_PAT / _RESULT_VIEW_PAT / ACCEPT_RECOMMEND_PAT 已移除。
@@ -146,74 +154,88 @@ def build_recommendation(state: dict, profile_ctx: str = "") -> dict | None:
     return {"key": key, "value": suggested, "label": nf["label"], "reason": reason}
 
 
-def write_option(state: dict, key: str, value) -> dict:
-    """选项点击直写（确定性，三态 SET）。多选=整集合替换（checkbox 全量提交，可移除）。"""
+def write_option(state: dict, key: str, value, strictness: str = "best-effort") -> dict:
+    """选项点击直写（确定性，正向点 D6/D7）：{value, state:set, strictness}。多选=整集合替换。"""
     pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
     f = next((x for x in req_schema.fields_for(pt) if x["key"] == key), None)
     if f and f["kind"] == "multi":
         # 多选：以本次选择为最终完整集合（不再追加旧值，支持取消勾选移除）
         state[key] = {"value": list(value) if isinstance(value, list) else [value],
-                      "state": SlotTriState.SET.value}
+                      "state": SlotTriState.SET.value, "strictness": strictness}
     else:
-        state[key] = {"value": value, "state": SlotTriState.SET.value}
+        state[key] = {"value": value, "state": SlotTriState.SET.value, "strictness": strictness}
     return state
 
 
-def merge_slot(state: dict, slot_delta: dict, extra: list[str] | None = None) -> dict:
-    """三态合并（LLD 6.4）：delta 覆盖/合并当前。
+def _append_extended(state: dict, item) -> None:
+    """extended（D8 结构化）追加：接受 dict {label,value,strictness} 或 str（label=value）。"""
+    ext = state.setdefault("extended", [])
+    if isinstance(item, dict):
+        val = str(item.get("value") or "").strip()
+        label = str(item.get("label") or "").strip() or val
+        st = item.get("strictness", "best-effort") or "best-effort"
+    else:
+        val = str(item).strip()
+        label = val
+        st = "best-effort"
+    if not val:
+        return
+    if any(e.get("label") == label and e.get("value") == val for e in ext):
+        return
+    ext.append({"label": label, "value": val, "strictness": st})
 
-    - 排除（EXCLUDED）→ 置排除（负向过滤）
-    - 多选：默认**整集合替换**（LLM 输出完整最终集，规则 A1）；`__merge__` 可覆盖为 append（补充）/ remove（移除项）
-    - 自创字段（不在当前品类 Schema）→ 归入 extra_constraints（UC-10），不入固定槽位
+
+def merge_slot(state: dict, slot_delta: dict, extra: list[dict] | None = None) -> dict:
+    """正向点合并（D6/D7/D8）：delta 覆盖/合并当前；**无 excluded/wildcard**（已移除）。
+
+    - 多选：默认**整集合替换**（LLM 输出完整最终集，规则 A1）；`merge` 可覆盖为 append（补充）/ remove（移除项）
+    - strictness：随点透传（缺省 best-effort，D7）
+    - 自创字段（不在当前品类 Schema）→ 归入 extended（结构化，D8），不入固定槽位
     """
     cur_pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
     d_pt = (slot_delta or {}).get("product_type")
     delta_pt = d_pt.get("value") if isinstance(d_pt, dict) else None
     pt = delta_pt or cur_pt  # 同一条消息同时给品类+扩展字段时，按新品类校验合法 key
-    valid_keys = {f["key"] for f in req_schema.fields_for(pt)} | {"product_type", "extra_constraints"}
+    valid_keys = {f["key"] for f in req_schema.fields_for(pt)} | {"product_type"}
     for key, sv in (slot_delta or {}).items():
         if not isinstance(sv, dict):
             continue
         if key not in valid_keys:
-            # UC-10：LLM 自创字段 → 归入 extra_constraints 或丢弃
+            # 自创字段 → extended（D8 结构化）
             v = sv.get("value")
             if v not in (None, [], ""):
+                st = sv.get("strictness", "best-effort") or "best-effort"
                 vals = v if isinstance(v, list) else [v]
-                state["extra_constraints"] = list(dict.fromkeys(
-                    state.get("extra_constraints", []) + [str(x) for x in vals]))
+                for x in vals:
+                    _append_extended(state, {"value": str(x), "strictness": st})
             continue
-        st = sv.get("state", SlotTriState.SET.value)
         val = sv.get("value")
-        if st == SlotTriState.EXCLUDED.value:
-            # 保留被排除的值（负向硬过滤用，匹配详细设计 4.5）
-            state[key] = {"value": val, "state": SlotTriState.EXCLUDED.value}
-        elif st == SlotTriState.WILDCARD.value:
-            state[key] = {"value": None, "state": SlotTriState.WILDCARD.value}
+        strictness = sv.get("strictness", "best-effort") or "best-effort"
+        prev = (state.get(key) or {}).get("value")
+        if isinstance(val, list):
+            # 多选默认 REPLACE（LLM 输出完整最终集）；merge 覆盖为 append / remove
+            m = sv.get("merge", "replace")
+            if m == "append":
+                combined = list(val)
+                if isinstance(prev, list):
+                    for v in prev:
+                        if v not in combined:
+                            combined.append(v)
+            elif isinstance(m, dict) and "remove" in m:
+                removed = set(m["remove"])
+                combined = list(val)
+                if isinstance(prev, list):
+                    for v in prev:
+                        if v not in combined and v not in removed:
+                            combined.append(v)
+            else:  # replace：整字段替换为本次值
+                combined = list(val)
+            state[key] = {"value": combined, "state": SlotTriState.SET.value, "strictness": strictness}
         else:
-            prev = (state.get(key) or {}).get("value")
-            if isinstance(val, list):
-                # 多选默认 REPLACE（LLM 输出完整最终集）；__merge__ 覆盖为 append / remove
-                m = sv.get("merge", "replace")
-                if m == "append":
-                    combined = list(val)
-                    if isinstance(prev, list):
-                        for v in prev:
-                            if v not in combined:
-                                combined.append(v)
-                elif isinstance(m, dict) and "remove" in m:
-                    removed = set(m["remove"])
-                    combined = list(val)
-                    if isinstance(prev, list):
-                        for v in prev:
-                            if v not in combined and v not in removed:
-                                combined.append(v)
-                else:  # replace：整字段替换为本次值
-                    combined = list(val)
-                state[key] = {"value": combined, "state": SlotTriState.SET.value}
-            else:
-                state[key] = {"value": val, "state": SlotTriState.SET.value}
+            state[key] = {"value": val, "state": SlotTriState.SET.value, "strictness": strictness}
     if extra:
-        state["extra_constraints"] = list(dict.fromkeys(state.get("extra_constraints", []) + extra))
+        for item in extra:
+            _append_extended(state, item)
     return state
 
 
@@ -263,11 +285,11 @@ async def extract_slots(state: dict, message: str, db=None, meta: dict | None = 
         ok = True
         return {
             "slot_delta": data.get("slot_delta", {}),
-            "extra_constraints": data.get("extra_constraints", []),
+            "extended": data.get("extended", data.get("extra_constraints", [])),
         }
     except Exception as exc:  # noqa: BLE001
         logger.warning("extract_slots failed: %s", exc)
-        return {"slot_delta": {}, "extra_constraints": []}
+        return {"slot_delta": {}, "extended": []}
     finally:
         if db is not None:
             try:
@@ -297,7 +319,15 @@ def completion_ready(state: dict) -> bool:
 
 
 def decide_question(state: dict) -> tuple[str | None, str, list[str], str]:
-    """返回 (追问字段 key|None, 文案, 选项, options_type)；完成则 None + 确认/开放引导；熔断触发给换方式话术。"""
+    """返回 (追问字段 key|None, 文案, 选项, options_type)。
+
+    D11：追问交 LLM（agent_reasoning 自然引导，sys_prompt 注入 allowed_set + 已填点）；
+    程序兜底只做——
+    - 品类未定 → 问品类（唯一必需锚点）；
+    - 门槛达成（D12：品类+≥1 需求点）→ 确认提示/开放引导；
+    - 门槛未达成（仅品类/0 需求点）→ 开放引导提示补充需求点（**不再 next_slot 逐维度模板追问**）。
+    熔断触发给换方式话术。
+    """
     actions = ["确认并提交匹配", "继续补充"]
     pt = _product_type(state)
     # 熔断：连续无进展 ≥3 轮 → 换方式/引导人工（SC-37/38/33）
@@ -305,23 +335,17 @@ def decide_question(state: dict) -> tuple[str | None, str, list[str], str]:
         return None, stall_text(), actions, "actions"
     if not pt:
         f = req_schema.FIXED_FIELDS[0]  # product_type
-        return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options", [])), "single"
+        return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options") or []), "single"
     verdict = req_schema.validate_completion(state, pt)
     if verdict["done"]:
-        # 仅首次提示确认；再次进入完成态 → 开放引导（不再重复 confirm）
+        # D12 门槛达成（品类 + ≥1 需求点）：不加引导句（低门槛勿承诺"需求完整"），仅返回两个动作按钮；
+        # 气泡正文由调用方用需求回执（summary/LLM 回执）填充；再次进入完成态 → 开放引导（不重复）
         if state.get("_confirm_prompted"):
             return None, OPEN_GUIDE_TEXT, actions, "actions"
         state["_confirm_prompted"] = True
-        return None, CONFIRM_TEXT, actions, "actions"
-    nf = req_schema.next_slot(state, pt)
-    if not nf:
-        return None, OPEN_GUIDE_TEXT, actions, "actions"
-    opts = list(nf.get("options", []))
-    level = nf.get("level", req_schema.LEVEL_SOFT)
-    prefix = "（可选）" if level == req_schema.LEVEL_OPTIONAL else ""
-    question = f"{prefix}请问您需要哪些{nf['label']}？" if nf["kind"] == "multi" else f"{prefix}请填写{nf['label']}："
-    otype = "multi" if nf.get("kind") == "multi" else ("single" if opts else "none")
-    return nf["key"], question, opts, otype
+        return None, "", actions, "actions"
+    # 门槛未达成（仅品类/0 需求点）→ 开放引导（D11：不逐维度模板追问，交由 LLM 自然引导）
+    return None, NEED_POINTS_TEXT, actions, "actions"
 
 
 # ---- 代理详细设计 v2 8/9：推理节点 / 状态修剪 / 引导模板 ----
@@ -392,11 +416,18 @@ def build_tool_schema(active_fields: list[dict]) -> dict:
             if f.get("options"):
                 p["enum"] = f["options"]
         props[key] = p
-    props["extra_constraints"] = {"type": "array", "items": {"type": "string"},
-                                  "description": "用户提出的未预定义维度（如'外壳黑色'）"}
-    props["__states__"] = {"type": "object",
-                           "description": "三态覆盖（仅出现时才写）：{'<key>':'excluded'} 排除某能力、"
-                                          "{'<key>':'wildcard'} 不限；未出现 = 正常指定 set。"}
+    props["__strictness__"] = {"type": "object",
+                               "description": "strictness 覆盖（D7，可选）：{'<key>':'strict'|'best-effort'}；"
+                                              "未出现 = 默认 best-effort。从语言推断：'必须/一定要/只要'→strict；"
+                                              "'最好/优先/希望/倾向'→best-effort。"}
+    props["extended"] = {"type": "array",
+                         "items": {"type": "object",
+                                   "properties": {
+                                       "label": {"type": "string", "description": "必填展示标签（外观/物流/包装…，D8）"},
+                                       "value": {"type": "string", "description": "约束语义短语（如'外壳黑色'）"},
+                                       "strictness": {"type": "string", "enum": ["strict", "best-effort"]}},
+                                   "required": ["label", "value"]},
+                         "description": "自由需求点（D8 结构化）：无法归入固定槽位的需求，如 外观/外壳黑色/strict"}
     props["__merge__"] = {"type": "object",
                            "description": "多选字段覆盖语义（可选）：{'<key>':'append'} 追加（补充某项，保留旧值）；"
                                           "{'<key>':{'remove':['值1']}} 从当前移除指定项；缺省=整字段替换（输出完整集合）。"}
@@ -404,9 +435,9 @@ def build_tool_schema(active_fields: list[dict]) -> dict:
         "type": "function",
         "function": {
             "name": "update_requirement_slots",
-            "description": "更新用户代工需求槽位。仅在用户明确提到时才写；纠正（改成/不对）覆盖旧值；"
-                           "排除（不要X）把值写入该槽位并在 __states__ 标记 excluded；不限/跳过 → __states__ 标 wildcard；"
-                           "无法归入固定槽位的归入 extra_constraints。不要编造。",
+            "description": "更新用户代工需求槽位（正向点，D6/D7）。仅在用户明确提到时才写；纠正（改成/不对）覆盖旧值；"
+                           "排除（不要X）→ 按语义处理（该槽位值不含 X，或写入 extended 描述）；不限/跳过 → 不写该槽位；"
+                           "无法归入固定槽位的归入 extended（结构化）。不要编造。",
             "parameters": {"type": "object", "properties": props, "required": []},
         },
     }
@@ -415,19 +446,24 @@ def build_tool_schema(active_fields: list[dict]) -> dict:
 def _render_slots(state: dict) -> str:
     lines = []
     for k, sv in state.items():
-        if k.startswith("_") or not isinstance(sv, dict) or "state" not in sv:
+        if k.startswith("_"):
             continue
-        st = sv["state"]
+        if k == "extended":
+            for e in sv or []:
+                lines.append(f"- extended: {e.get('label')} → {e.get('value')}（{e.get('strictness','best-effort')}）")
+            continue
+        if not isinstance(sv, dict):
+            continue
         v = sv.get("value")
         val = "、".join(v) if isinstance(v, list) else v
-        lines.append(f"- {k}: state={st}, value={val}")
+        lines.append(f"- {k}: {val}（{sv.get('strictness','best-effort')}）")
     return "\n".join(lines) if lines else "（无）"
 
 
 def _allowed_lines(active_fields: list[dict]) -> str:
     lines = []
     for f in active_fields:
-        opts = " /".join(f.get("options", []))
+        opts = " /".join(f.get("options") or [])
         lines.append(f"- {f['key']}（{f['label']}，{f.get('level')}）{opts}")
     return "\n".join(lines) if lines else "（无）"
 
@@ -466,12 +502,16 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
     next_hint = f"{nf['label']}" if nf else "（无，可围绕当前需求自然收尾）"
     sys_prompt = (
         "你是需脉AI选型助手，专注 B2B 代工制造需求萃取。\n"
+        "**代工锚定**：用户描述的『产品/设备/硬件』（如智能音箱、语音助手、机顶盒）是**要委托代工制造的整机**，"
+        "先锚定品类（product_type）再按制造需求（OS/接口/认证/产能/交期等）萃取；"
+        "不要把用户当服务/软件购买者，也不要当厂商自我介绍——即便用户未明说『代工/生产/制造』，"
+        "只要是描述要做某产品的需求都按代工处理。\n"
         f"当前品类：{pt or '未定'}\n"
         f"本轮建议追问维度：{next_hint}（你可围绕它自然提问；若用户已提供其他合法槽位也可顺带写入）\n"
         "# 当前可填槽位（allowed_set）\n" + _allowed_lines(active) + "\n"
-        "# 当前已填槽位（三态）\n" + _render_slots(state) + "\n"
+        "# 当前已填需求点（正向点 + strictness）\n" + _render_slots(state) + "\n"
         "# 工具选择规则\n"
-        "A. 用户本轮给出了明确槽位信息（含补充/纠正/排除/不限）→ 调用 update_requirement_slots 写入；可在正文给简短回执。\n"
+        "A. 用户本轮给出了明确槽位信息（含补充/纠正）→ 调用 update_requirement_slots 写入；可在正文给简短回执。\n"
         "A1. **多选字段（os/interfaces/certifications 等）**：纠正/重新声明/排除某项 → 输出**最终完整集合**整体替换——"
         "如「只要Android」→ os=['Android']；「把Linux去掉」且当前 ['Linux','Android'] → os=['Android']。"
         "补充/追加某项（如「再加RTOS」）→ 可仅给新增项并设 __merge__:{'<key>':'append'}（保留旧值）。"
@@ -512,7 +552,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         logger.warning("agent_reasoning failed: %s", exc)
 
     slot_delta: dict = {}
-    extra: list[str] = []
+    extra: list[dict] = []
     has_tool = False
     submit_request = False
     classify_intent: str | None = None
@@ -536,36 +576,43 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
         if name != "update_requirement_slots":
             continue
         has_tool = True
-        states = args.get("__states__") or {}
+        strictness = args.get("__strictness__") or {}
         merges = args.get("__merge__") or {}
         for k, v in args.items():
-            if k in ("__states__", "__merge__"):
+            if k in ("__strictness__", "__merge__"):
                 continue
-            if k == "extra_constraints":
-                ex = v if isinstance(v, list) else [v]
-                extra = list(dict.fromkeys(str(x) for x in ex if x not in (None, "")))
+            if k == "extended":
+                ex = v if isinstance(v, list) else []
+                extra.extend(e for e in ex if isinstance(e, dict) and e.get("value"))
                 continue
             if k not in allowed_keys:
-                # 自创/非法 key → 归 extra_constraints
+                # 自创/非法 key → 归 extended（D8 结构化）
                 vals = v if isinstance(v, list) else [v]
-                extra.extend(str(x) for x in vals if x not in (None, ""))
+                for x in vals:
+                    if x not in (None, ""):
+                        extra.append({"label": str(x), "value": str(x), "strictness": "best-effort"})
                 continue
-            st = states.get(k, "set")
             # 数字字段强转（模型常输出字符串 "5000" → int）
             if kinds.get(k) == "number" and not isinstance(v, int):
                 try:
                     v = int(str(v).strip())
                 except Exception:
                     v = v  # 保持原值，交由 merge/校验处理
-            if st == "excluded":
-                slot_delta[k] = {"value": v, "state": SlotTriState.EXCLUDED.value}
-            elif st == "wildcard":
-                slot_delta[k] = {"value": None, "state": SlotTriState.WILDCARD.value}
-            else:
-                mg = merges.get(k)
-                slot_delta[k] = {"value": v, "state": SlotTriState.SET.value,
-                                 **({"merge": mg} if mg else {})}
-    extra = list(dict.fromkeys(extra))
+            mg = merges.get(k)
+            slot_delta[k] = {"value": v,
+                             "strictness": strictness.get(k, "best-effort") or "best-effort",
+                             **({"merge": mg} if mg else {})}
+    # 结构化去重（同 label+value）
+    seen: set = set()
+    dedup: list[dict] = []
+    for e in extra:
+        if isinstance(e, dict):
+            kk = (e.get("label"), e.get("value"))
+            if kk in seen:
+                continue
+            seen.add(kk)
+        dedup.append(e)
+    extra = dedup
 
     # 意图判定（v2.1）：填槽 > 提交 > 结构化分类 > 兜底
     if slot_delta:
@@ -600,7 +647,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
             logger.warning("llm_call_log write failed: %s", exc)
 
     return {"intent": intent, "reply_text": reply_text, "slot_delta": slot_delta,
-            "extra_constraints": extra, "has_tool": has_tool, "submit_request": submit_request}
+            "extended": extra, "has_tool": has_tool, "submit_request": submit_request}
 
 
 def category_switch(state: dict, slot_delta: dict) -> tuple[str, str] | None:
@@ -627,7 +674,7 @@ def reconcile(state: dict) -> dict:
     for key in list(state.keys()):
         if key.startswith("_"):
             continue
-        if key in ("product_type", "extra_constraints"):
+        if key in ("product_type", "extended"):
             continue
         if key not in active_keys:
             del state[key]
@@ -641,16 +688,14 @@ def weak_close_recap(state: dict) -> str:
     parts = []
     for f in req_schema.active_fields(state, pt):
         sv = state.get(f["key"])
-        if sv and sv.get("state") == SlotTriState.SET.value and sv.get("value") not in (None, [], ""):
+        if sv and sv.get("value") not in (None, [], ""):
             v = sv["value"]
             parts.append(f"{f['label']}={'、'.join(v) if isinstance(v, list) else v}")
-    extras = state.get("extra_constraints", [])
-    if extras:
-        parts.append(f"扩展需求={'、'.join(extras)}")
-    missing = [req_schema.label_of(k, pt) for k in verdict["missing_hard"]]
+    for e in state.get("extended", []) or []:
+        parts.append(f"{e.get('label') or e.get('value')}：{e.get('value')}")
+    if not req_schema.validate_completion(state, pt)["done"]:
+        parts.append("（需补充至少 1 个需求点后方可提交，D12）")
     summary = "好的，当前需求档案：" + ("；".join(parts) if parts else "（空）")
-    if missing:
-        summary += f"。还差：{'、'.join(missing)}"
     summary += "。确认并提交匹配，还是继续补充？"
     return summary
 

@@ -36,10 +36,10 @@ class MatchItem(BaseModel):
     summary: str | None = None
     match_score: float
     semantic_score: float | None = None
-    param_hit_rate: float | None = None
-    critical_fail: bool = False
     match_source: Literal["llm", "rule", "hybrid"] = "llm"
     matched_count: int = 0
+    partial_count: int = 0
+    missing_count: int = 0
     unmatched_count: int = 0
 
 
@@ -55,15 +55,13 @@ class MatchComputeResponse(BaseModel):
 
 
 class MatchParam(BaseModel):
-    """单条参数判定（仅对买家已指定参数判定；出处引用指向厂商原始文档）。
-
-    partial 语义为“需协商·厂商未声明”：买家已指定但厂商能力档案未声明/部分覆盖。
-    """
+    """单条需求点判定（四档 D10：matched/partial/missing/unmatched，missing 独立；source 溯源指向厂商原始文档）。"""
 
     key: str
     label: str
     value: str
-    verdict: Literal["matched", "partial", "unmatched"]
+    verdict: Literal["matched", "partial", "missing", "unmatched"]
+    strictness: str = "best-effort"
     source_doc_id: str | None = None
     source_doc_name: str | None = None
     source_page: int | None = None
@@ -71,7 +69,10 @@ class MatchParam(BaseModel):
 
 
 class MatchDetailResponse(BaseModel):
-    """匹配详情（含解释；异步生成，未生成时 explanation_status=pending 返回骨架标记，前端轮询）。"""
+    """匹配详情（含解释；异步生成，未生成时 explanation_status=pending 返回骨架标记，前端轮询）。
+
+    四组判定（D10：missing 独立成组，不并入 partial）；match_reason/risk_warning（D4 顾问级解释）。
+    """
 
     match_id: str
     request_id: str
@@ -79,6 +80,9 @@ class MatchDetailResponse(BaseModel):
     company_name: str
     matched_params: list[MatchParam] = Field(default_factory=list)
     partial_params: list[MatchParam] = Field(default_factory=list)
+    missing_params: list[MatchParam] = Field(default_factory=list)
     unmatched_params: list[MatchParam] = Field(default_factory=list)
+    match_reason: str | None = None
+    risk_warning: str | None = None
     ai_comment: str | None = None
     explanation_status: Literal["pending", "ready"] = "pending"

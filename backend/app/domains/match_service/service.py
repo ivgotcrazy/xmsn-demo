@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BuyerRequest, MatchResult, MatchRun, Vendor, VendorCapability
 from app.domains.conversation import schema as req_schema
-from app.domains.match_service import judger, retriever, scorer
+from app.domains.match_service import judger, retriever, scorer, stage0
 from app.schemas.common import err_404
 from app.schemas.conversation import DemandPoint
 from app.schemas.match import (
@@ -31,6 +31,9 @@ from app.schemas.match import (
 )
 
 logger = logging.getLogger("xmsn.match")
+
+# Stage3 TopK（D10：K 默认 10，同时是 Stage4 解释范围，§5.3.5）
+TOP_K = 10
 
 
 # ---------- 工具 ----------
@@ -46,13 +49,13 @@ def _norm_slot(sv):
     return sv, "set"
 
 
-_EXTRA_CONSTRAINTS_LABEL = "扩展需求"
+_EXTENDED_LABEL = "扩展需求"
 
 
 def _param_label(key: str, product_type: str | None) -> str:
-    """参数标签：schema 固定/品类扩展优先；extra_constraints 特例映射（解释按需求字段 key 生成）。"""
-    if key == "extra_constraints":
-        return _EXTRA_CONSTRAINTS_LABEL
+    """需求点标签：本体品类 Schema 提供；extended 特例映射（D8）。"""
+    if key == "extended":
+        return _EXTENDED_LABEL
     return req_schema.label_of(key, product_type)
 
 
@@ -66,30 +69,28 @@ def _fmt_value(v) -> str:
 
 
 def _demand_points(demand: dict) -> list[DemandPoint]:
-    """structured_demand → DemandPoint 列表（02B 左栏展示）。"""
-    pt_slot = _norm_slot((demand or {}).get("product_type"))
-    product_type = pt_slot[0] if pt_slot[1] == "set" else None
+    """structured_demand（正向点快照 D6/D7/D8）→ DemandPoint 列表（02B 左栏展示，schema 实例 + strictness）。"""
+    dims = (demand or {}).get("dimensions", {})
+    pt_sv = dims.get("product_type") or {}
+    product_type = pt_sv.get("value") if isinstance(pt_sv, dict) else None
     pts: list[DemandPoint] = []
-    for k, sv in (demand or {}).items():
-        # extra_constraints 为纯 list（非槽位），由下方 extra 循环逐条展开，避免重复
-        if k == "extra_constraints":
+    for k, sv in dims.items():
+        if not isinstance(sv, dict):
             continue
-        v, st = _norm_slot(sv)
-        if st != "set":
-            continue
+        v = sv.get("value")
         if v in (None, "", []):
             continue
         if isinstance(v, list):
             v = [str(x) for x in v]
         else:
             v = str(v)
-        pts.append(DemandPoint(key=k, label=_param_label(k, product_type),
-                               value=v, confidence=1.0))
-    extra = demand.get("extra_constraints")
-    if isinstance(extra, list):
-        for c in extra:
-            pts.append(DemandPoint(key="extra_constraints", label=_EXTRA_CONSTRAINTS_LABEL,
-                                   value=str(c), confidence=0.9))
+        pts.append(DemandPoint(key=k, label=_param_label(k, product_type), value=v,
+                               strictness=sv.get("strictness", "best-effort"), confidence=1.0))
+    for e in (demand or {}).get("extended", []) or []:
+        if isinstance(e, dict) and e.get("value"):
+            pts.append(DemandPoint(key="extended", label=e.get("label") or _EXTENDED_LABEL,
+                                   value=str(e["value"]),
+                                   strictness=e.get("strictness", "best-effort"), confidence=0.9))
     return pts
 
 
@@ -107,7 +108,7 @@ def _dedup_params(items: list[dict] | None) -> list[dict]:
 
 
 def _match_param(j: dict, product_type: str | None = None) -> MatchParam:
-    """ParamJudgement/解释条目 → 前端 MatchParam（label 规范化 + note + source 溯源）。"""
+    """判定条目 → 前端 MatchParam（四值 D10 + strictness + note + source 溯源）。"""
     dv = _fmt_value(j.get("demand_value"))
     sv = _fmt_value(j.get("supply_value")) or "未声明"
     value = f"需求 {dv} / 厂商 {sv}"
@@ -120,8 +121,8 @@ def _match_param(j: dict, product_type: str | None = None) -> MatchParam:
         key=j["param"],
         label=_param_label(j["param"], product_type),
         value=value,
-        # missing（厂商未声明）语义并入 partial（需协商）；解释内部枚举 4 值，契约 3 值归一
-        verdict="partial" if j.get("verdict") == "missing" else j["verdict"],
+        verdict=j.get("verdict", "missing"),  # 四值（D10：missing 独立）
+        strictness=j.get("strictness", "best-effort"),
         source_doc_id=src.get("doc_id"),
         source_doc_name=src.get("doc_name"),
         source_page=src.get("page"),
@@ -129,21 +130,7 @@ def _match_param(j: dict, product_type: str | None = None) -> MatchParam:
     )
 
 
-def _excluded_hard_filter(demand: dict, tags: dict) -> bool:
-    """排除项硬过滤（4.5）：厂商能力命中排除值 → 直接淘汰。"""
-    for param, _w, d_field, s_field, _k, _c in judger.PARAM_MAP:
-        if not s_field:
-            continue
-        ex = judger.excluded_values(demand, d_field)
-        if not ex:
-            continue
-        s_val = tags.get(s_field)
-        if s_val is None:
-            continue
-        s_set = set(s_val) if isinstance(s_val, list) else {str(s_val)}
-        if any(str(x) in s_set for x in ex):
-            return True
-    return False
+# 排除项硬过滤已移除（D6：能力可加、多余能力不 disqualify；"不要X"由需求侧语义处理）
 
 
 async def _run_of(db: AsyncSession, request_id: uuid.UUID) -> MatchRun:
@@ -174,7 +161,7 @@ async def _load_vendors(db: AsyncSession, vendor_ids: list[str]) -> dict[str, Ve
 
 
 async def _build_items(db: AsyncSession, rows: list[dict]) -> list[MatchItem]:
-    """rows（含 vendor_id）→ 联厂商/档案 → MatchItem。"""
+    """rows（含 vendor_id）→ 联厂商/档案 → MatchItem（四计数 D10）。"""
     caps = await _load_caps(db, [r["vendor_id"] for r in rows])
     vendors = await _load_vendors(db, [r["vendor_id"] for r in rows])
     items: list[MatchItem] = []
@@ -182,6 +169,8 @@ async def _build_items(db: AsyncSession, rows: list[dict]) -> list[MatchItem]:
         v = vendors.get(r["vendor_id"])
         cap = caps.get(r["vendor_id"])
         matched = [j for j in r["judgements"] if j["verdict"] == judger.MATCHED]
+        partial = [j for j in r["judgements"] if j["verdict"] == judger.PARTIAL]
+        missing = [j for j in r["judgements"] if j["verdict"] == judger.MISSING]
         unmatched = [j for j in r["judgements"] if j["verdict"] == judger.UNMATCHED]
         items.append(MatchItem(
             match_id=r["match_id"],
@@ -191,10 +180,10 @@ async def _build_items(db: AsyncSession, rows: list[dict]) -> list[MatchItem]:
             summary=(cap.summary_text if cap else None),
             match_score=r["match_score"],
             semantic_score=r["semantic_score"],
-            param_hit_rate=r["param_hit_rate"],
-            critical_fail=r["critical_fail"],
             match_source=r["match_source"],
             matched_count=len(matched),
+            partial_count=len(partial),
+            missing_count=len(missing),
             unmatched_count=len(unmatched),
         ))
     return items
@@ -229,39 +218,42 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
     await db.execute(delete(MatchResult).where(MatchResult.request_id == rid))
     await db.commit()
 
-    # 通道A（embedding 失败 → hybrid 标签兜底）
+    # Stage0 硬筛（D2/D6）：strict 受控维度 SQL → passed
+    dims = (demand or {}).get("dimensions", {})
+    pt_sv = dims.get("product_type") or {}
+    product_type = pt_sv.get("value") if isinstance(pt_sv, dict) else None
+    passed = await stage0.stage0(db, demand, product_type)
+
+    # Stage1 召回（D9/D10）：passed 内两路 ANN（REP ∪ 原文块），semantic 只做召回
     a_source = "llm"
     try:
-        cands = await retriever.retrieve(demand)
+        cands = await retriever.retrieve(demand, passed_ids=passed or None)
         if not cands:
             a_source = "llm"
     except Exception as exc:  # noqa: BLE001
-        logger.warning("channelA embed failed, tag fallback: %s", exc)
+        logger.warning("Stage1 embed failed, tag fallback: %s", exc)
         cands = await retriever.tag_search(demand)
         a_source = "hybrid"
 
     caps = await _load_caps(db, [c["vendor_id"] for c in cands])
 
-    # 通道B 并发（T7.3 性能：50 家候选串行 LLM 59s → 并发 8 控制在 SLO）
+    # Stage2 判定 + Stage3 打分（并发）
     async def _process(cand: dict) -> dict | None:
         cap = caps.get(cand["vendor_id"])
         if not cap or not cap.structured_tags:
             return None
         tags = cap.structured_tags
-        if _excluded_hard_filter(demand, tags):
-            return None  # 排除项硬过滤（4.5）
-        judgements, b_source = await judger.judge(demand, tags)
-        source = "rule" if b_source == "rule" else a_source  # 通道B 降级优先标注
-        sc = scorer.score(cand["semantic_score"], judgements)
+        judgements, strict_ok = await judger.judge(demand, tags, product_type)
+        sc = scorer.score(judgements)
         if sc["match_score"] < scorer.MIN_MATCH_SCORE:
-            return None  # 阈值 30 剔除
+            return None  # 阈值 60 剔除（D10）
+        has_semantic = any(j.get("kind") == "semantic" for j in judgements)
         return {
             "vendor_id": cand["vendor_id"],
             "match_score": sc["match_score"],
             "semantic_score": round(cand["semantic_score"], 4),
-            "param_hit_rate": sc["param_hit_rate"],
-            "critical_fail": sc["critical_fail"],
-            "match_source": source,
+            "strict_ok": strict_ok,
+            "match_source": "llm" if has_semantic else "rule",
             "judgements": judgements,
         }
 
@@ -275,18 +267,19 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
     rows = [r for r in results if r]
 
     rows.sort(key=lambda r: -r["match_score"])
+    rows = rows[:TOP_K]  # Stage3 TopK（D10：K=10，同时是 Stage4 解释范围）
     computation_ms = int((time.perf_counter() - t0) * 1000)
 
-    # 落库 match_results（verdict 三组，打分用）
+    # 落库 match_results（verdict 四组，D10 missing 独立成组）
     top_match_ids: list[str] = []
     for r in rows:
         mr = MatchResult(
             run_id=run.run_id, request_id=rid, vendor_id=uuid.UUID(r["vendor_id"]),
             match_score=r["match_score"], semantic_score=r["semantic_score"],
-            param_hit_rate=r["param_hit_rate"], critical_fail=r["critical_fail"],
             match_source=r["match_source"],
             matched_params=[j for j in r["judgements"] if j["verdict"] == judger.MATCHED],
-            partial_params=[j for j in r["judgements"] if j["verdict"] in (judger.PARTIAL, judger.MISSING)],
+            partial_params=[j for j in r["judgements"] if j["verdict"] == judger.PARTIAL],
+            missing_params=[j for j in r["judgements"] if j["verdict"] == judger.MISSING],
             unmatched_params=[j for j in r["judgements"] if j["verdict"] == judger.UNMATCHED],
         )
         db.add(mr)
@@ -299,10 +292,10 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
     run.computation_time_ms = computation_ms
     await db.commit()
 
-    # 异步触发 Top-5 解释（T5.2，TaskQueue；不阻塞 compute）
+    # Stage4 异步解释（§5.3.5：解释范围 = Stage3 的 TopK；不阻塞 compute）
     if top_match_ids:
         from app.core.queue import queue
-        for mid in top_match_ids[:5]:
+        for mid in top_match_ids:
             await queue.enqueue("match_explain", {"match_id": mid})
 
     if rows:
@@ -332,14 +325,13 @@ async def _load_existing_rows(db: AsyncSession, rid: uuid.UUID, run: MatchRun) -
     )
     rows: list[dict] = []
     for mr in res.scalars().all():
-        judgements = (mr.matched_params or []) + (mr.partial_params or []) + (mr.unmatched_params or [])
+        judgements = ((mr.matched_params or []) + (mr.partial_params or [])
+                      + (mr.missing_params or []) + (mr.unmatched_params or []))
         rows.append({
             "vendor_id": str(mr.vendor_id),
             "match_id": str(mr.match_id),
             "match_score": mr.match_score or 0,
             "semantic_score": mr.semantic_score or 0,
-            "param_hit_rate": mr.param_hit_rate or 0,
-            "critical_fail": mr.critical_fail,
             "match_source": mr.match_source,
             "judgements": judgements,
         })
@@ -379,7 +371,10 @@ async def detail(db: AsyncSession, match_id: str) -> MatchDetailResponse:
         company_name=vendor.company_name if vendor else "未知厂商",
         matched_params=[_match_param(j, product_type) for j in _dedup_params(mr.matched_params)],
         partial_params=[_match_param(j, product_type) for j in _dedup_params(mr.partial_params)],
+        missing_params=[_match_param(j, product_type) for j in _dedup_params(mr.missing_params)],
         unmatched_params=[_match_param(j, product_type) for j in _dedup_params(mr.unmatched_params)],
+        match_reason=mr.match_reason,
+        risk_warning=mr.risk_warning,
         ai_comment=mr.ai_comment,
         explanation_status="ready" if ready else "pending",
     )

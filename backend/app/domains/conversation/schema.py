@@ -1,15 +1,15 @@
-"""需求 Schema（T3.1）：固定字段 + 品类扩展 + 三态。实现以架构 6.6 / 代理 LLD 0.1 为准。
+"""需求 Schema（T3.1）：本体（D1）+ 品类扩展 + 三态。实现以供需Schema / AI核心 v2 为准。
 
-- 固定字段（共通维度，参与通道B计分）
-- 品类扩展（按 product_type 加载：机顶盒/智能音箱/IoT设备/其他）
-- 开放扩展（extra_constraints）不在此静态 Schema，见对话合并逻辑
-- 三态：set（已指定）/ wildcard（未指定通配）/ excluded（明确排除）
+- 固定字段（通用维度）= 本体 general（provenance=general，供需Schema §3.4）
+- 品类扩展（按 product_type 加载）= 本体品类字段（extends 共享组已合并，§3.5）
+- 开放扩展（extended）不在此静态 Schema，见对话合并逻辑（D8 结构化）
+- 三态：set（已指定）/ wildcard（未指定通配）/ excluded（明确排除）——Step 3 收敛为正向点
 """
 from __future__ import annotations
 
-import json
 from enum import Enum
-from pathlib import Path
+
+from app.domains import ontology
 
 
 class SlotTriState(str, Enum):
@@ -31,73 +31,31 @@ LEVEL_OPTIONAL = "optional"
 #   未生效字段：不进入 allowed_set / 追问 / 完成判定；reconcile 会确定性清除其脏值。
 
 
-# 固定字段（架构 6.6.1）
-FIXED_FIELDS: list[dict] = [
-    {"key": "product_type", "label": "产品类型", "kind": "single", "required": True, "level": LEVEL_HARD,
-     "options": ["机顶盒", "智能音箱", "IoT设备", "其他"]},
-    {"key": "os", "label": "操作系统", "kind": "multi", "level": LEVEL_HARD,
-     "options": ["Linux", "Android", "RTOS", "其他"]},
-    {"key": "interfaces", "label": "接口", "kind": "multi", "level": LEVEL_HARD,
-     "options": ["网口", "USB", "HDMI", "GPIO", "其他"]},
-    {"key": "certifications", "label": "认证", "kind": "multi", "level": LEVEL_HARD,
-     "options": ["CE", "FCC", "CCC", "SRRC", "ISO9001", "其他"]},
-    {"key": "moq", "label": "起订量", "kind": "number", "level": LEVEL_SOFT},
-    {"key": "lead_time_days", "label": "交期(天)", "kind": "number", "level": LEVEL_SOFT},
-    {"key": "application_scenario", "label": "应用场景", "kind": "single", "level": LEVEL_SOFT},
-    {"key": "customization_needs", "label": "定制需求", "kind": "single", "level": LEVEL_SOFT},
-    {"key": "budget_range", "label": "预算范围", "kind": "single", "optional": True, "level": LEVEL_OPTIONAL},
-]
+# 固定字段（通用维度）= 本体 general（D1，来源 ontology.json / 供需Schema §3.4）
+FIXED_FIELDS: list[dict] = ontology.general_fields()
 
-# 品类扩展（架构 6.6.2）→ 外部 JSON 配置（L2 多品类配置化：新增品类不改代码）
-def _load_categories() -> dict[str, list[dict]]:
-    """从 schema_categories.json 加载品类扩展字段；缺失/异常静默回退空。"""
-    p = Path(__file__).resolve().parent / "schema_categories.json"
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-CATEGORY_EXTENSIONS: dict[str, list[dict]] = _load_categories()
-
-# 完成判定"关键维度"（代理 LLD 0.4）：品类锚点之外的必填关键项
-KEY_DIMS = ["os", "interfaces", "certifications"]
-
-
-def _normalize(f: dict, category: str | None = None) -> dict:
-    """字段缺省归一：未标 level 则按锚点/关键维度/optional 推断；品类扩展补 depends_on=品类锚点。"""
-    f = dict(f)
-    if "level" not in f:
-        if f["key"] == "product_type" or f["key"] in KEY_DIMS:
-            f["level"] = LEVEL_HARD
-        elif f.get("optional"):
-            f["level"] = LEVEL_OPTIONAL
-        else:
-            f["level"] = LEVEL_SOFT
-    if "depends_on" not in f and category:
-        f["depends_on"] = [{"key": "product_type", "values": [category]}]
-    return f
+# 品类扩展 = 本体品类字段（extends 共享组已合并，D1，来源 ontology.json / 供需Schema §3.5）
+CATEGORY_EXTENSIONS: dict[str, list[dict]] = {
+    name: ontology.category_fields(name) for name in ontology.category_names()
+}
 
 
 def fields_for(product_type: str | None) -> list[dict]:
-    """当前品类的完整字段（固定 + 品类扩展），已归一 level/depends_on。"""
-    fixed = [_normalize(f) for f in FIXED_FIELDS]
-    if not product_type:
-        return fixed
-    return fixed + [_normalize(f, product_type) for f in CATEGORY_EXTENSIONS.get(product_type, [])]
+    """品类 Schema 全量字段 = 本体 general + 品类（extends 已合并）。"""
+    return ontology.fields_for(product_type)
 
 
 def label_of(key: str, product_type: str | None = None) -> str:
-    for f in fields_for(product_type):
-        if f["key"] == key:
-            return f["label"]
-    return key
+    return ontology.label_of(key, product_type)
 
 
 def next_unfilled(state: dict, product_type: str | None) -> dict | None:
-    """按字段顺序返回下一个未指定且必填的字段（用于追问）；无则 None。"""
+    """按字段顺序返回下一个未指定且必填的字段（用于追问）；无则 None。
+
+    D6：已确认"不限/跳过"的维度（_confirmed_unlimited，Agent 私有标记）不再追问。"""
+    skip = set(state.get("_confirmed_unlimited", []))
     for f in fields_for(product_type):
-        if f.get("optional"):
+        if f.get("optional") or f["key"] in skip:
             continue
         sv = state.get(f["key"])
         if not sv or sv.get("state") != SlotTriState.SET.value or _empty(sv.get("value")):
@@ -172,13 +130,27 @@ def next_slot(state: dict, product_type: str | None) -> dict | None:
 
 
 def validate_completion(state: dict, product_type: str | None) -> dict:
-    """动态 Validator：active 且 level=hard 的字段 100% SET 且非空 → done。
+    """完成判定（D12）：品类锚定 + 至少 1 个需求点（品类外 dimensions 或 extended 非空）→ done。
+
+    不再有 hard/soft 分级（D11）；missing_* 保留空结构兼容旧调用。最终由用户确认（两步化确认框）把关。
     返回 {done, missing_hard[], missing_soft[]}。"""
-    active = active_fields(state, product_type)
-    missing_hard = [f["key"] for f in active
-                    if f.get("level") == LEVEL_HARD and not _is_filled(state.get(f["key"]))]
-    missing_soft = [f["key"] for f in active
-                    if f.get("level") in (LEVEL_SOFT, LEVEL_OPTIONAL) and not _is_filled(state.get(f["key"]))]
-    return {"done": len(missing_hard) == 0,
-            "missing_hard": missing_hard,
-            "missing_soft": missing_soft}
+    anchored = bool((state.get("product_type") or {}).get("value"))
+    enough = count_demand_points(state, product_type) >= 1
+    return {"done": anchored and enough, "missing_hard": [], "missing_soft": []}
+
+
+def count_demand_points(state: dict, product_type: str | None = None) -> int:
+    """品类外需求点数（D12 提交门槛）：非 product_type 的正向指定点（value 非空）+ extended 条数。"""
+    n = 0
+    for k, sv in state.items():
+        if k.startswith("_") or k in ("product_type", "extended"):
+            continue
+        if isinstance(sv, dict) and not _empty(sv.get("value")):
+            n += 1
+    n += len(state.get("extended") or [])
+    return n
+
+
+def schema_ref_of(product_type: str | None) -> str:
+    """品类 Schema 引用（D1：需求档案 = 品类 Schema 的实例，通过 schema_ref 指向定义）。"""
+    return f"category:{product_type}@v1" if product_type else "category:@v1"

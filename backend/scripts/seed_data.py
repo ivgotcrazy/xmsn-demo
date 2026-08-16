@@ -33,31 +33,34 @@ SUFFIX = ["有限公司", "股份有限公司", "有限责任公司"]
 # 品类 → 能力模板（真实风格）
 CATALOG = {
     "机顶盒": {
-        "os_support": ["Linux", "Android", "Linux/Android"],
+        "os": ["Linux", "Android", "Linux/Android"],
         "interfaces": [["网口", "USB", "HDMI"], ["网口", "USB"], ["网口", "HDMI", "AV"]],
         "certifications": [["CE", "FCC", "SRRC"], ["CE", "ISO9001"], ["CE", "FCC"], ["CCC", "SRRC"]],
         "process_types": ["SMT贴片、组装测试", "SMT贴片、老化测试、组装", "组装测试、老化测试"],
         "product_types": ["机顶盒"],
         "application_scenarios": ["家庭娱乐", "酒店IPTV", "运营商终端"],
-        "summary": "专注{pt}ODM，{proc}，支持{os}，月产能{cap}万台，交期{lead}天。",
+        "soft_tags": ["支持AV1/HDR10", "可定制面板"],
+        "summary": "专注{pt}ODM，{proc}，支持{os}系统，接口{iface}，认证{cert}，MOQ{moq}台起，月产能{cap}万台，交期{lead}天，{soft}。",
     },
     "智能音箱": {
-        "os_support": ["Android", "RTOS", "Android/RTOS"],
+        "os": ["Android", "RTOS", "Android/RTOS"],
         "interfaces": [["蓝牙", "WiFi", "Type-C"], ["蓝牙", "WiFi"], ["WiFi", "Type-C"]],
         "certifications": [["CE", "FCC"], ["CE"], ["SRRC", "CE"]],
         "process_types": ["SMT贴片、声学测试、组装", "声学测试、组装", "SMT贴片、组装、煲机测试"],
         "product_types": ["智能音箱"],
         "application_scenarios": ["家庭", "智能家居", "酒店客房"],
-        "summary": "专注{pt}方案，{proc}，支持{os}，月产能{cap}万台，交期{lead}天。",
+        "soft_tags": ["远场拾音", "可定制外壳"],
+        "summary": "专注{pt}方案，{proc}，支持{os}系统，接口{iface}，认证{cert}，MOQ{moq}台起，月产能{cap}万台，交期{lead}天，{soft}。",
     },
     "IoT设备": {
-        "os_support": ["RTOS", "FreeRTOS"],
+        "os": ["RTOS", "FreeRTOS"],
         "interfaces": [["LoRa", "NB-IoT", "BLE"], ["BLE", "WiFi", "Zigbee"], ["NB-IoT", "4G"]],
         "certifications": [["SRRC", "CE"], ["CE"], ["FCC", "SRRC"]],
         "process_types": ["SMT贴片、防水测试、组装", "SMT贴片、环境测试", "组装、老化测试"],
         "product_types": ["IoT设备"],
         "application_scenarios": ["智能家居", "工业监测", "智慧农业", "资产追踪"],
-        "summary": "专注{pt}终端，{proc}，支持{os}，月产能{cap}万台，交期{lead}天。",
+        "soft_tags": ["低功耗设计", "远程OTA"],
+        "summary": "专注{pt}终端，{proc}，支持{os}系统，接口{iface}，认证{cert}，MOQ{moq}台起，月产能{cap}万台，交期{lead}天，{soft}。",
     },
 }
 CATEGORIES = ["机顶盒", "智能音箱", "IoT设备"]
@@ -95,7 +98,7 @@ def _gen_vendor(i: int) -> tuple[dict, dict]:
     cat = random.choice(CATEGORIES)
     tpl = CATALOG[cat]
     tags = {
-        "os_support": random.choice(tpl["os_support"]),
+        "os": random.choice(tpl["os"]),
         "interfaces": random.choice(tpl["interfaces"]),
         "certifications": random.choice(tpl["certifications"]),
         "process_types": random.choice(tpl["process_types"]),
@@ -106,9 +109,12 @@ def _gen_vendor(i: int) -> tuple[dict, dict]:
         "monthly_capacity": random.choice([10, 20, 30, 50, 80, 100]),
         "customization": random.choice(["ODM", "OEM", "ODM/OEM"]),
     }
+    soft_tags = tpl["soft_tags"]
     summary = tpl["summary"].format(
         pt=tags["product_types"][0], proc=tags["process_types"],
-        os=tags["os_support"], cap=tags["monthly_capacity"], lead=tags["lead_time_days"],
+        os=tags["os"], cap=tags["monthly_capacity"], lead=tags["lead_time_days"],
+        moq=tags["moq"], cert="、".join(tags["certifications"]), iface="、".join(tags["interfaces"]),
+        soft="、".join(soft_tags),
     )
     credit = f"91{i:08d}{i:04d}K"  # 15 位，≤ VARCHAR(18)
     vendor = {
@@ -118,7 +124,7 @@ def _gen_vendor(i: int) -> tuple[dict, dict]:
         "credit_code": credit,
         "audit_status": "passed",
     }
-    return vendor, {"tags": tags, "summary": summary, "industry": cat}
+    return vendor, {"tags": tags, "summary": summary, "industry": cat, "soft_tags": soft_tags}
 
 
 async def _seed_users(db) -> None:
@@ -149,6 +155,7 @@ async def _seed_vendors(db) -> None:
         cap = VendorCapability(
             vendor_id=vendor.vendor_id,
             structured_tags=cdata["tags"],
+            soft_tags=cdata["soft_tags"],
             summary_text=cdata["summary"],
             completeness=1.0,
             source_type="seed",
@@ -159,7 +166,7 @@ async def _seed_vendors(db) -> None:
         db.add(cap)
         await db.flush()
         # 双轨向量：代表向量 + 简化原文块（溯源展示用）
-        await vector.index_representative(str(vendor.vendor_id), cdata["tags"], cdata["summary"])
+        await vector.index_representative(str(vendor.vendor_id), cdata["summary"])
         page_text = "".join(
             f"{k}:{'、'.join(v) if isinstance(v, list) else v}\n" for k, v in cdata["tags"].items()
         )

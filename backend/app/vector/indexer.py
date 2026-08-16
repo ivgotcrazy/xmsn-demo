@@ -1,6 +1,6 @@
 """双轨向量索引（T2.4 / 架构 6.2）。
 
-代表向量 = 档案 structured_tags 拼装 + summary（1 档案 1 向量，通道A）；
+代表向量 = embed(summary)（D9：自然语言全字段 ≤400 字，1 档案 1 向量，路径A）；
 原文块向量 = 文档按 800 字切块（overlap 100），携带 vendor_id/doc_id/page/chunk_text（引用溯源）。
 重新解析/删除后调用方先删旧向量再写入（保持"仅最新"）。
 """
@@ -30,25 +30,6 @@ def chunk_text(text: str, max_chars: int = 800, overlap: int = 100) -> list[str]
     return chunks
 
 
-def rep_text(tags: dict, summary: str) -> str:
-    """代表向量文本：structured_tags 拼装 + summary。"""
-    return " ".join(
-        str(v) for v in [
-            f"工艺:{tags.get('process_types')}",
-            f"认证:{tags.get('certifications')}",
-            f"OS:{tags.get('os_support')}",
-            f"接口:{tags.get('interfaces')}",
-            f"起订量:{tags.get('moq')}",
-            f"交期:{tags.get('lead_time_days')}天",
-            f"月产能:{tags.get('monthly_capacity')}",
-            f"产品:{tags.get('product_types')}",
-            f"场景:{tags.get('application_scenarios')}",
-            f"定制:{tags.get('customization')}",
-            f"其他:{summary}",
-        ]
-    )
-
-
 def _delete_sync(vendor_id: str) -> None:
     client = get_client()
     for col in (REP_COLLECTION, CHUNK_COLLECTION):
@@ -75,9 +56,9 @@ async def delete_vendor_vectors(vendor_id: str) -> None:
     await asyncio.to_thread(_delete_sync, vendor_id)
 
 
-async def index_representative(vendor_id: str, tags: dict, summary: str) -> None:
-    """写入厂商代表向量（覆盖）。"""
-    text = rep_text(tags, summary)
+async def index_representative(vendor_id: str, summary: str) -> None:
+    """写入厂商代表向量（覆盖）——REP = embed(summary)（D9：自然语言全字段 ≤400 字）。"""
+    text = summary
     [vec] = await embed([text])
     await asyncio.to_thread(_upsert_rep, vendor_id, text, vec)
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 匹配详情面板（原型 02B / COMP-024）：Drawer 内——子分数副行 + 三组判定（匹配/需协商·厂商未声明/不匹配）
- * + 行内文档引用（点击全屏预览原文）+ AI 评语 + 查看厂商能力。
+ * 匹配详情面板（原型 02B / COMP-024）：Drawer 内——match_score + 四组判定（D10：missing 独立）
+ * + match_reason/risk_warning（D4）+ 行内文档引用 + AI 评语 + 查看厂商能力。
  */
 import { computed, ref } from "vue"
 import { NButton, NModal, NSpin, NTag } from "naive-ui"
@@ -25,7 +25,8 @@ const emit = defineEmits<{
 
 const GROUP = [
   { key: "matched_params", title: "匹配项", type: "success" },
-  { key: "partial_params", title: "未声明项", type: "warning" },
+  { key: "partial_params", title: "部分匹配", type: "warning" },
+  { key: "missing_params", title: "未声明项", type: "default" },
   { key: "unmatched_params", title: "不匹配项", type: "error" },
 ] as const
 
@@ -35,6 +36,7 @@ const hitText = computed(() => {
   const total =
     matched +
     (props.detail?.partial_params?.length ?? 0) +
+    (props.detail?.missing_params?.length ?? 0) +
     (props.detail?.unmatched_params?.length ?? 0)
   return `参数命中 ${matched}/${total}`
 })
@@ -62,16 +64,21 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
   <div class="match-detail">
     <NSpin :show="loading">
       <template v-if="detail">
-        <div v-if="item?.critical_fail" class="match-detail__alert match-detail__alert--warn">
-          ⚠️ 关键参数匹配需进一步协商确认
+        <div v-if="detail.risk_warning" class="match-detail__alert match-detail__alert--warn">
+          ⚠️ {{ detail.risk_warning }}
         </div>
         <div class="match-detail__head">
           <h3>{{ detail.company_name }}</h3>
           <span class="match-detail__vendor" @click="emit('viewVendor')">厂商详情</span>
         </div>
         <div class="match-detail__subrow">
-          语义相似度 {{ semanticPct }}% · {{ hitText }}
+          匹配分 {{ item?.match_score ?? 0 }} · 语义相似度 {{ semanticPct }}% · {{ hitText }}
         </div>
+
+        <section v-if="detail.match_reason" class="match-detail__comment">
+          <h4>匹配理由</h4>
+          <p>{{ detail.match_reason }}</p>
+        </section>
 
         <section v-if="detail.ai_comment" class="match-detail__comment">
           <h4>匹配概要</h4>

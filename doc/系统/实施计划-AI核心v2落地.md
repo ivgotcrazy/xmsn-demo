@@ -22,43 +22,60 @@
 
 ## 1. 分步改造（依赖顺序，每步可运行）
 
-### Step 1 本体配置化（D1，前置基座）
-- **新增** `backend/app/domains/match_service/ontology.py`：承载需求点 schema 元数据（通用 + 4 品类 + 扩展规则），字段含 `{key, label, value_type(enum/scalar/number/text), unit, options, direction, strict_supported}`；消费 e 供需Schema §3.4/3.5/§7 的 JSON。
-- **改造** `conversation/schema.py`：`FIXED_FIELDS` → 读本体；删除三态 `SlotTriState`、`LEVEL_*` 分级常量、**`KEY_DIMS` 与 `pending_slots` 完成判定机制**（D12）。
-- **统一 key**：`os_support` → `os`（消除映射层，D1）。
-- **验收**：单测（本体加载、key 全局唯一、options 闭集无"其他"）；`python -c "from app.domains.match_service.ontology import *"` 可导入。
+### Step 1 本体配置化（D1，前置基座）—— ✅ 已完成（2026-08-16）
+- **新增** `backend/app/domains/ontology.json`：本体配置（general 11 维 + `shared_groups.consumer_electronics`（os/interfaces/wireless）+ 3 品类 fields，**extends 结构**、闭集无"其他"）；`backend/app/domains/ontology.py`：解析 + 查询 API（`fields_for`/`label_of`/`value_type_of`/`category_names`；含 **level/optional 兼容层推导**，本体不含 level，D11）。
+- **改造** `conversation/schema.py`：`FIXED_FIELDS`/`CATEGORY_EXTENSIONS` → 从本体派生；`fields_for`/`label_of` 走本体；**删除 `KEY_DIMS`/`_load_categories`/`_normalize`**（D12）。
+- **兼容层**：三态 `SlotTriState`/`LEVEL_*`/`pending_slots` 保留（agent/service 仍引用，Step 3 需求侧删除）；旧 `schema_categories.json` 已不被引用（Step 3 删除）。
+- **单测**：`tests/test_ontology.py` 11 例全过（品类闭集 / 维度展开 17/19/18 / extends 共享 / label / depends_on / 状态机兼容）。
+- **遗留（后续步骤）**：能力侧 `os_support` → `os`（Step 2 extractor/validator/indexer/seed_data）；judger/retriever 的 os_support 映射（Step 4 重写消除）。
 
-### Step 2 能力侧升级（D1/D3/D9）
-- `vendor_service/extractor.py` `PROMPT_PARSE`：结构化输出改**本体同 key**；`summary_text` 改**自然语言串联全部萃取字段（含 soft.tags），≤400 字**（D9）。
-- `vendor_service/extractor.py`：新增 **`soft.tags`** 提取（本体外自由能力标签，D3）。
-- `vector/indexer.py`：删 `rep_text` 拼接 → `index_representative(vendor_id, summary)` 直接 `embed(summary)`；`chunk_text` 与原文块向量保留。
-- 能力画像落库：`structured{key:{value,confidence,source}}` + `soft{tags,summary,doc_chunks}`。
-- **验收**：解析一条样本 → REP 为 `embed(summary)`、key 同本体、含 soft.tags、summary 覆盖全字段 ≤400字。
+### Step 2 能力侧升级（D1/D3/D9）—— ✅ 已完成（2026-08-16）
+- `vendor_service/extractor.py` `PROMPT_PARSE`：`os_support` → **`os`**（D1 同 key）；`summary_text` 改**自然语言串联全部萃取字段（含 soft_tags），≤400 字**（D9）；新增 **`soft_tags`**（D3 软层自由标签）。
+- `vendor_service/validator.py`：`HARD_FIELDS` 的 `os_support` → `os`；`validate` 返回 5 元组（+ soft_tags 透传）。
+- `db/models.py`：`VendorCapability` 新增 `soft_tags` JSONB；**alembic 迁移 `d3f0c1a2b9e7`** 已应用。
+- `vector/indexer.py`：删 `rep_text` 拼接 → `index_representative(vendor_id, summary)` 直接 `embed(summary)`（D9）；`chunk_text`/原文块保留。
+- `worker/_parse_capability`：`soft_tags` 落库；`index_representative` 新签名。
+- `scripts/seed_data.py` + `seed_curated.py` + `data/curated_vendors.json`：`os_support` → `os`、补 `soft_tags`、summary 模板全字段自然语言；`index_representative` 新签名。
+- `match_service/judger.py`/`retriever.py`：`os_support` → `os`（PARAM_MAP/CRITICAL/_tags_hit 映射同 key 对齐；判定逻辑不动，Step 4 重写读本体）。
+- **单测**：`tests/test_capability.py` 4 例全过（PROMPT 同 key/400字/soft_tags、validate 归一/completeness 分母含 os）；连同本体共 15 例全过。
 
-### Step 3 需求侧升级（D5/D6/D7/D8/D11）
-- `conversation/schema.py`：三态 → **正向点**（删除 EXCLUDED；wildcard 降为 Agent 私有标记不落库）；**strictness 两档**（strict/best-effort）；`extra_constraints` → **extended 结构化 `{label, value, strictness}`**（D8）。
-- `conversation/agent.py`：`merge_slot` 去 excluded 分支；`extract_slots` 输出含 strictness + extended 结构化；sys_prompt 注入**品类 allowed_set + 已填需求点**，**追问交 LLM**（D11，去 pending_slots 分级）。
-- `conversation/service.py`：`_slots_snapshot` → **正向点快照**（`{schema_ref, dimensions:{key:{value,strictness}}, extended:[...]}`）；**两步化提交（D7）**：Agent 判定 → 确认框（strictness 只读可微调）→ 确认落库；**提交门槛（D12）= 品类锚定 + ≥1 需求点 + 用户确认**，后台校验 `len(dimensions)+len(extended)>=1` 拦截 0 需求点提交。
-- **验收**：e2e 一条对话 → 快照为正向点 + strictness + extended；无 excluded/level 字段；**0 需求点提交被后台拦截**（仅品类 → 提示补至少 1 个需求点）。
+### Step 3 需求侧升级（D5-D8/D11/D12）—— ✅ 已完成核心（2026-08-16）
+- `schemas/conversation.py`：`DemandPoint` 加 `strictness`（strict/best-effort，D7）。
+- `conversation/schema.py`：新增 `schema_ref_of(pt)`、`count_demand_points(state,pt)`；`validate_completion` 改 **D12 门槛**（品类锚定 + 品类外 ≥1 需求点）；`next_unfilled` 跳过 `_confirmed_unlimited`（D6 私有标记）。
+- `conversation/agent.py`：`EXTRACT_PROMPT`/`build_tool_schema` 去三态（`__states__`→`__strictness__`）；`write_option`/`merge_slot` 改**正向点** `{value, state:set, strictness}`；**extended 结构化**（D8）；自创字段归 extended；`reconcile`/`weak_close_recap` 对齐。
+- `conversation/service.py`：`_slots_snapshot` → **正向点快照** `{schema_ref, dimensions:{key:{value,strictness}}, extended:[...], version}`（无 state/excluded）；`to_demand_points` schema 感知 + strictness；`_delta_summary` 去三态；**提交门槛 D12**（`_do_confirm`/`_do_submit_from_message` 校验 0 需求点）；**两步化**（confirm 接收 demand_points 微调 strictness）；start 品类闭集去"其他"；"跳过/不限"→ `_confirmed_unlimited` 私有标记不入档。
+- `api/conversation.py`：confirm 传 `payload.demand_points`。
+- **D11 追问兜底修复**：`agent.decide_question` 移除 `next_slot` 逐维度模板追问分支（"请问您需要哪些接口/认证"）——门槛未达成（仅品类/0 需求点）→ 开放引导 `NEED_POINTS_TEXT`（提示补充需求点，追问交 LLM 自然引导）；`next_slot` 仅保留作 `build_recommendation`/`agent_reasoning` 的参考锚点。
+- **单测**：`tests/test_conversation.py` 11 例（正向点/strictness/extended/快照无 state/门槛 D12/私有标记）；连同本体+能力侧共 26 例全过。
+- **遗留**：`eval.py` 仍用旧 `extra_constraints` 键与三态断言（Step 6 更新评估集）；匹配侧读取（Step 4 重写）；前端（Step 5）。
 
-### Step 4 匹配漏斗改造（D2/D9/D10 + Stage0-4）
-- **Stage0 硬筛**：`match_service/stage0.py` 新增 SQL（JSONB `@>` 闭集等值、数值方向**无容差**、枚举已归一）→ 输出 `passed` 集（D2/D6，删除 `_excluded_hard_filter`）。
-- **Stage1 召回**：`retriever.py` 改 **passed 内两路 ANN**（REP ∪ 原文块）；`semantic_score = max(rep, chunk)` **只做召回**；`demand_embedding_text` 改**自然语言模板**（D9，去三态 key:value 拼接）。
-- **Stage2 判定**：`judger.py` 删 `PARAM_MAP` → 读本体 `value_type` 派生（enum 集合 / scalar 等值 / number 容差1.5 / text LLM）；**verdict 四档**（matched/partial/missing/unmatched，missing 独立，D10）；strictness 接受规则（strict→仅 matched；best-effort→全接受）。
-- **Stage3 打分**：`service.py` `compute` → `match_score = round(Σ需求点档位/需求点数)`（0-100，四档 100/50/30/0，阈值 60，TopK）；删权重 / 0.4-0.6 blend / `critical_fail` / `param_hit_rate`。
-- **Stage4 解释**：`worker/_explain_match` 输入改 **Stage3 TopK** → 四组 verdict + `match_reason` + `risk_warning` + `ai_comment`（带 source 溯源，D4）；失败回退 Stage2/3 结果。
-- **验收**：用贯穿示例（V1 华声 / V2 锐联 / V3 微芯 / V4 极光）→ Stage0 passed=[V1,V4]、V4=94、V1=73（物流 missing=30）；`eval_match_runner.py` 回归。
+### Step 4 匹配漏斗 Stage0-4（D1/D2/D6/D7/D9/D10 + AI核心 §5.3）—— ✅ 已完成核心（2026-08-16）
+- **契约** `schemas/match.py`：`MatchItem` 去 `param_hit_rate`/`critical_fail` → 四计数（matched/partial/missing/unmatched_count）；`MatchParam.verdict` 四值（missing 独立，D10）+ strictness；`MatchDetailResponse` **四组** + `match_reason`/`risk_warning`（D4）。
+- **模型/迁移**：`MatchResult` 加 `missing_params`/`match_reason`/`risk_warning`（alembic `a4b5c6d7e8f9` 已应用；`param_hit_rate`/`critical_fail` 列保留兼容旧数据）。
+- **Stage0** `stage0.py`（新建）：SQL JSONB 硬筛（strict 受控 enum/scalar/number，无容差；best-effort 不进；品类恒硬条件；仅 passed 厂商）→ `passed` 集。
+- **Stage1** `retriever.py`：`demand_embedding_text` 自然语言模板（D9，label+值+extended）；**两路 ANN**（REP ∪ 原文块，passed 内）；`semantic_score=max(rep,chunk)` 只做召回（D10）。
+- **Stage2** `judger.py`：删 `PARAM_MAP`/`CRITICAL` → 本体 `value_type` 派生四档（enum 集合 / scalar 等值无 partial / number 容差1.5 / text+extended LLM 语义）；**strict_ok**（D7：strict 未满足不硬杀，供 Stage4 risk_warning）。
+- **Stage3** `scorer.py`：`match_score = round(Σ档位/N)`（100/50/30/0）；**阈值 60**（D10）；无权重。
+- **编排** `service.py`：Stage0→Stage1→Stage2/3 并发→**TopK（K=10）**→四组落库→触发 Stage4 解释（全部 TopK）。
+- **Stage4** `explain.py`/`worker`：四组 + `match_reason`/`risk_warning`/`ai_comment`（D4）；TopK 解释范围。
+- **单测**：`tests/test_match.py` 8 例（四档判定/scorer 等权/demand_embedding_text/Stage0 SQL）；全量 **34 例**全过。
+- **遗留**：`eval_match_runner.py` 依赖旧契约（Step 6 更新）；前端（Step 5）。
 
-### Step 5 前端适配（D5/D7/D10）
-- `ChatView.vue` / `DemandProfileCard.vue`：**当前需求 = 需求档案**（schema_ref + 需求点实例），label/options 由品类 Schema 提供（不再"不感知 schema"）。
-- 确认框（两步化）：只读展示 Agent 判定的 strictness，可微调后提交。
-- `MatchDetailPanel.vue`：**四组**（missing 独立）+ `match_score` + `risk_warning`；去 `critical_fail` 红色警示。
-- `packages/api` / `packages/types`：契约同步（快照格式、match 字段、四计数）。
-- **验收**：浏览器验证 02A 对话 → 确认框 → 02B 详情四组。
+### Step 5 前端适配（D5/D7/D10）—— ✅ 已完成核心（2026-08-16）
+- `packages/types`：`ParamKey` 本体 key（去 os_support/权重）、`REQUEST_SCHEMA_FIELDS` 去 weight/critical（D10）、`Verdict` 四值 + `VERDICT_META`（missing 独立）、`CapabilityKey` os。
+- `packages/api/src/types.ts`：`DemandPoint`+strictness、`MatchItem` 四计数去 param_hit_rate/critical_fail、`MatchParam` 四值、`MatchDetailResponse` 四组+match_reason/risk_warning。
+- `DemandProfileCard.vue`：需求点实例 + **strictness 徽标**（必须/尽力，D7）。
+- `MatchDetailPanel.vue`：**四组**（missing 独立）+ `match_reason`/`risk_warning`（D4）；去 `critical_fail` 红色警示。
+- `MatchResultItem.vue`：四计数 meta + 未声明提示；去 critical_fail 标签。
+- `ChatView.vue`：**两步化确认框**（D7）——`openConfirm` 打开 NModal（需求点 + strictness 可切换）+ D12 门槛前置校验（品类 + ≥1 需求点）+ `confirm()` 提交（editablePoints 微调 strictness）。
+- `admin RequestsView`（missing 计数）、`VendorsView`/`VendorCapabilityView`（os）。
+- **验证**：VSCode TS 检查关键文件无错误；本地 node_modules 缺失（容器内已装，构建留待容器验证）。
 
-### Step 6 回归与评估
-- e2e 回归（buyer 13912345678 / vendor 18812345678 演示账号）；DB 迁移（alembic：`buyer_requests.structured_demand`、`vendor_capabilities.structured_tags`、`match_results` 字段变化）。
-- 评估集扩充（strictness / 四档 / 召回边界用例）；**§5.3.6 ② 参数（min_semantic / top_k / 聚合）用评估数据定**。
+### Step 6 迁移 + 回归 + 评估 —— 代码层已完成（2026-08-16）
+- `agent.extract_slots` 输出 `extended`（D8）；`eval.py`/`eval_match_runner.py` 适配新快照（正向点 + dimensions 锚点判断）。
+- alembic 迁移已应用：`d3f0c1a2b9e7`（vendor_capabilities.soft_tags）+ `a4b5c6d7e8f9`（match_results missing_params/match_reason/risk_warning）。
+- 全量单测 **34 例**全过（本体/能力/需求/匹配）。
+- **遗留（用户审查后验证）**：① 容器内 pnpm build + e2e 回归（02A 对话→两步化确认→02B 四组详情）；② 重新导出 openapi 契约（前端 types 已手动对齐）；③ msw mockData 更新（os/四计数/四值）；④ 评估集扩充（strictness/四档/召回边界）；⑤ **§5.3.6② 参数（min_semantic/top_k/聚合）用评估数据定**；⑥ 旧数据一次性迁移（三态快照→正向点；旧能力 os_support→os）。
 
 ---
 

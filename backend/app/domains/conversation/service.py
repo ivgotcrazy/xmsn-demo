@@ -53,12 +53,12 @@ async def _append_event(db: AsyncSession, conversation_id: str, event_type: str,
 
 
 def to_demand_points(state: dict) -> list[DemandPoint]:
-    """current_slots → 前端「当前需求」需求点集合（不感知 schema；三态 SET 才展示）。"""
+    """current_slots → 前端「当前需求」需求点集合（D5：需求点实例；label 由品类 Schema；strictness 两档 D7）。"""
     pts: list[DemandPoint] = []
     pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
     for f in req_schema.fields_for(pt):
         sv = state.get(f["key"])
-        if sv and sv.get("state") == SlotTriState.SET.value and sv.get("value") is not None:
+        if sv and sv.get("value") is not None:
             v = sv["value"]
             if isinstance(v, list) and len(v) == 0:
                 continue
@@ -66,9 +66,12 @@ def to_demand_points(state: dict) -> list[DemandPoint]:
                 v = [str(x) for x in v]
             else:
                 v = str(v)
-            pts.append(DemandPoint(key=f["key"], label=f["label"], value=v, confidence=1.0))
-    for c in state.get("extra_constraints", []):
-        pts.append(DemandPoint(key="extra_constraints", label="扩展需求", value=str(c), confidence=0.9))
+            pts.append(DemandPoint(key=f["key"], label=f["label"], value=v,
+                                   strictness=sv.get("strictness", "best-effort"), confidence=1.0))
+    for e in state.get("extended", []) or []:
+        pts.append(DemandPoint(key="extended", label=e.get("label") or e.get("value") or "扩展需求",
+                               value=str(e.get("value", "")),
+                               strictness=e.get("strictness", "best-effort"), confidence=0.9))
     return pts
 
 
@@ -77,33 +80,46 @@ def _title_of(state: dict) -> str:
     return str(pt) if pt else "新会话"
 
 
+def _is_empty(v) -> bool:
+    if v is None:
+        return True
+    if isinstance(v, list):
+        return len(v) == 0
+    return str(v).strip() == ""
+
+
 def _slots_pure(state: dict) -> dict:
-    """三态 slots → 纯值 dict（兼容旧快照读取；新快照用 _slots_snapshot）。"""
+    """需求点 → 纯值 dict（兼容旧快照读取；新快照用 _slots_snapshot）。"""
     out: dict = {}
     for k, sv in state.items():
-        if k.startswith("_"):
+        if k.startswith("_") or k == "extended":
             continue
-        if isinstance(sv, dict) and "state" in sv:
-            if sv["state"] == SlotTriState.EXCLUDED.value:
-                out[k] = {"excluded": True, "value": sv.get("value")}  # 保留排除值（M4 硬过滤）
-            elif sv["state"] == SlotTriState.SET.value and sv.get("value") is not None:
-                out[k] = sv["value"]
-        elif k == "extra_constraints":
-            out[k] = sv
+        if isinstance(sv, dict) and sv.get("value") is not None:
+            out[k] = sv["value"]
+    if state.get("extended"):
+        out["extended"] = list(state["extended"])
     return out
 
 
 def _slots_snapshot(state: dict) -> dict:
-    """三态 slots → 三态快照（structured_demand 落库，对齐匹配详细设计 0.2/8.1：含 state/value/排除）。"""
-    out: dict = {}
+    """正向点快照（structured_demand 落库，对齐 AI核心 §9 契约：D6/D7/D8）。
+
+    {schema_ref, dimensions: {key: {value, strictness}}, extended: [{label, value, strictness}], version}
+    只存明确指定的需求点（value 非空）；wildcard/排除不落档（D6）。
+    """
+    pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+    dims: dict = {}
     for k, sv in state.items():
-        if k.startswith("_"):
+        if k.startswith("_") or k == "extended":
             continue
-        if isinstance(sv, dict) and "state" in sv:
-            out[k] = {"value": sv.get("value"), "state": sv["state"]}
-        elif k == "extra_constraints":
-            out[k] = sv
-    return out
+        if isinstance(sv, dict) and not _is_empty(sv.get("value")):
+            dims[k] = {"value": sv.get("value"), "strictness": sv.get("strictness", "best-effort")}
+    return {
+        "schema_ref": req_schema.schema_ref_of(pt),
+        "dimensions": dims,
+        "extended": list(state.get("extended") or []),
+        "version": 1,
+    }
 
 
 async def start(db: AsyncSession, user_id: str) -> ConversationStartResponse:
@@ -111,7 +127,7 @@ async def start(db: AsyncSession, user_id: str) -> ConversationStartResponse:
     conv = Conversation(user_id=uuid.UUID(user_id), title="新会话", status="active",
                         conversation_history=[],
                         current_slots={"_pending": {"key": "product_type",
-                                                     "options": ["机顶盒", "智能音箱", "IoT设备", "其他"]}})
+                                                     "options": ["机顶盒", "智能音箱", "IoT设备"]}})
     db.add(conv)
     await db.commit()
     await db.refresh(conv)
@@ -120,7 +136,7 @@ async def start(db: AsyncSession, user_id: str) -> ConversationStartResponse:
         conversation_id=str(conv.conversation_id),
         first_message=AssistantMessage(
             content="您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？",
-            options=["机顶盒", "智能音箱", "IoT设备", "其他"],
+            options=["机顶盒", "智能音箱", "IoT设备"],
             options_type="single",
         ),
         demand_points=[],
@@ -250,8 +266,8 @@ async def message(db: AsyncSession, conversation_id: str, text: str, clicked_opt
     if conflict:
         return await _category_switch_block(db, conv, state, history, turn, text, *conflict)
 
-    state = agent.merge_slot(state, rr["slot_delta"], rr["extra_constraints"])
-    parsed = {"slot_delta": rr["slot_delta"], "extra_constraints": rr["extra_constraints"]}
+    state = agent.merge_slot(state, rr["slot_delta"], rr["extended"])
+    parsed = {"slot_delta": rr["slot_delta"], "extended": rr["extended"]}
 
     # 提交意图（LLM 识别）→ 执行提交（护栏：品类锚点缺失禁止；缺项警示）
     if rr.get("submit_request"):
@@ -262,9 +278,9 @@ async def message(db: AsyncSession, conversation_id: str, text: str, clicked_opt
         return await _non_extract_message(
             db, conv, state, history, turn, text, rr.get("intent", "empty"), rr_reply)
 
-    progress = bool(rr["slot_delta"] or rr["extra_constraints"])
+    progress = bool(rr["slot_delta"] or rr["extended"])
     slot_delta = parsed.get("slot_delta", {})
-    new_extras = parsed.get("extra_constraints", [])
+    new_extras = parsed.get("extended", [])
 
     # 熔断计数（有进展清零）
     _bump_stall(state, progress)
@@ -278,7 +294,8 @@ async def message(db: AsyncSession, conversation_id: str, text: str, clicked_opt
     if new_extras:
         if summary:
             summary += "；"
-        summary += "扩展需求已记录：" + "、".join(new_extras)
+        summary += "扩展需求已记录：" + "、".join(
+            (e.get("label") or e.get("value")) if isinstance(e, dict) else str(e) for e in new_extras)
     if slot_delta or new_extras:
         history.append({"role": "assistant", "content": summary, "options": []})
 
@@ -289,7 +306,8 @@ async def message(db: AsyncSession, conversation_id: str, text: str, clicked_opt
     # 混合意图/回执：有槽位且有 LLM 正文 → 正文 + 追问合并；有槽位但 LLM 无正文（只调工具）→
     # 用确定性回执 summary + 追问（避免"无回执复读模板"，红线1）
     body = rr_reply if rr_reply else (summary if (slot_delta or new_extras) else "")
-    final_content = f"{body}\n\n{question}" if body else question
+    # D12：门槛达成时 question 为空（无引导句），气泡正文直接用需求回执/LLM 回执 + 按钮
+    final_content = f"{body}\n\n{question}" if (body and question) else (body or question)
 
     title = _title_of(state)
     if conv.title == "新会话" and title != "新会话":
@@ -315,7 +333,7 @@ async def _handle_click(
     turn: int, clicked_option, text: str,
 ) -> MessageResponse:
     """点击（UI 动作）→ 确定性执行（v2.1 红线6，不做文本匹配）：槽位直写 / 推荐采纳·拒绝·跳过 / 继续补充开放引导。"""
-    parsed = {"slot_delta": {}, "extra_constraints": []}
+    parsed = {"slot_delta": {}, "extended": []}
     # 1) SC-05 推荐选项（state._recommend 存在时）
     rec = state.get("_recommend")
     if rec:
@@ -323,7 +341,7 @@ async def _handle_click(
             state.pop("_recommend", None)
             if rec.get("key"):
                 state = agent.write_option(state, rec["key"], rec["value"])
-                parsed = {"slot_delta": {rec["key"]: state[rec["key"]]}, "extra_constraints": []}
+                parsed = {"slot_delta": {rec["key"]: state[rec["key"]]}, "extended": []}
         elif clicked_option in ("我自己定", "我自己选", "我自己说"):
             state.pop("_recommend", None)
         elif clicked_option in ("跳过", "先不填", "不限"):
@@ -331,8 +349,10 @@ async def _handle_click(
             _pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
             _nf = req_schema.next_slot(state, _pt)
             if _nf:
-                state[_nf["key"]] = {"value": None, "state": SlotTriState.WILDCARD.value}
-                parsed = {"slot_delta": {_nf["key"]: state[_nf["key"]]}, "extra_constraints": []}
+                # D6：不限/跳过 → 不写需求点（wildcard 不入档），降为 Agent 私有标记（不再追问）
+                state["_confirmed_unlimited"] = list(dict.fromkeys(
+                    state.get("_confirmed_unlimited", []) + [_nf["key"]]))
+                parsed = {"slot_delta": {}, "extended": []}
     # 2) 槽位选项（pending.key 存在；多选=list，单选=str）
     elif (state.get("_pending") or {}).get("key"):
         pending = state["_pending"]
@@ -342,11 +362,11 @@ async def _handle_click(
             key = pending["key"]
             val = valid if len(valid) > 1 else valid[0]
             state = agent.write_option(state, key, val)
-            parsed = {"slot_delta": {key: state[key]}, "extra_constraints": []}
+            parsed = {"slot_delta": {key: state[key]}, "extended": []}
     # 2') 品类锚点兜底（_pending 缺失时首个点击即品类，防御）
     elif not (state.get("product_type") or {}).get("value") and isinstance(clicked_option, str):
         state = agent.write_option(state, "product_type", clicked_option)
-        parsed = {"slot_delta": {"product_type": state["product_type"]}, "extra_constraints": []}
+        parsed = {"slot_delta": {"product_type": state["product_type"]}, "extended": []}
     # 3) 继续补充（完成态按钮）→ 开放引导
     elif clicked_option == "继续补充":
         state["_pending"] = {"key": None, "options": ["确认并提交匹配", "继续补充"]}
@@ -380,15 +400,17 @@ async def _handle_click(
     title = _title_of(state)
     if conv.title == "新会话" and title != "新会话":
         conv.title = title
-    history.append({"role": "assistant", "content": question, "options": opts, "options_type": otype})
+    # D12：question 为空（无引导句）时用需求回执 summary 作气泡正文（有按钮承载动作）
+    content = question or summary or ""
+    history.append({"role": "assistant", "content": content, "options": opts, "options_type": otype})
     conv.current_slots = state
     conv.conversation_history = history
     await db.commit()
     if slot_delta:
         await _append_event(db, str(conv.conversation_id), "slot_updated", {"turn": turn, "delta": slot_delta})
-    await _append_event(db, str(conv.conversation_id), "question", {"turn": turn, "question": question[:300], "options": opts})
+    await _append_event(db, str(conv.conversation_id), "question", {"turn": turn, "question": (content or "")[:300], "options": opts})
     return MessageResponse(
-        assistant_message=AssistantMessage(content=question, options=opts, options_type=otype),
+        assistant_message=AssistantMessage(content=content, options=opts, options_type=otype),
         demand_points=to_demand_points(state), title=conv.title,
     )
 
@@ -400,6 +422,9 @@ async def _do_submit_from_message(
     state = agent.reconcile(state)
     if not (state.get("product_type") or {}).get("value"):
         reply = AssistantMessage(content="请先明确要寻找的产品类型，才能提交匹配。", options=[])
+        return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
+    if not req_schema.validate_completion(state, (state.get("product_type") or {}).get("value"))["done"]:
+        reply = AssistantMessage(content="还需补充至少 1 个需求点（如操作系统、认证、起订量等）才能提交匹配。", options=[])
         return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
     conv.current_slots = state  # 先持久化合并后的槽位，_do_confirm 快照取当前 state
     try:
@@ -426,20 +451,17 @@ async def _do_submit_from_message(
 
 
 def _delta_summary(delta: dict, state: dict) -> str:
-    """本轮槽位变化的自然语言回执（供历史气泡展示）。"""
+    """本轮需求点变化的自然语言回执（供历史气泡展示；正向点 + strictness，D7）。"""
     parts = []
     for k, sv in delta.items():
         if not isinstance(sv, dict):
             continue
         label = req_schema.label_of(k, (state.get("product_type") or {}).get("value") if state.get("product_type") else None)
-        st = sv.get("state")
-        if st == SlotTriState.EXCLUDED.value:
-            parts.append(f"不要求{label}")
-        elif st == SlotTriState.WILDCARD.value:
-            parts.append(f"{label}不限")
-        else:
-            v = sv.get("value")
-            parts.append(f"{label}已记录：{'、'.join(v) if isinstance(v, list) else v}")
+        v = sv.get("value")
+        if v in (None, [], ""):
+            continue
+        tag = "（必须）" if sv.get("strictness", "best-effort") == "strict" else ""
+        parts.append(f"{label}{tag}已记录：{'、'.join(v) if isinstance(v, list) else v}")
     return "；".join(parts)
 
 
@@ -450,22 +472,26 @@ async def _next_version(db: AsyncSession, conversation_id: uuid.UUID) -> int:
     return int(res.scalar_one() or 0) + 1
 
 
-async def _do_confirm(db: AsyncSession, conv: Conversation) -> tuple[BuyerRequest, MatchRun, list[str]]:
-    """确认提交（SC-22/25）：生成快照（version++）+ match_runs（running）。
+async def _do_confirm(db: AsyncSession, conv: Conversation, demand_points=None) -> tuple[BuyerRequest, MatchRun, list[str]]:
+    """确认提交（D7/D12）：两步化（确认框 strictness 可微调）+ 提交门槛校验。
 
-    - 品类锚点缺失 → 400（禁止提交）；
-    - 其余硬约束缺失 + 强命令 → 允许但返回显著警示（warnings，不静默），对应 SC-25；
+    - 提交门槛（D12）：品类锚定 + 至少 1 个需求点（品类外 dimensions 或 extended 非空）→ 否则 400；
+    - demand_points（可选，D7 两步化）：前端确认框回传的 strictness 微调，覆盖 Agent 判定；
     - 会话状态重新设计（第 10 章）：不再写 conv.status="confirmed"（提交是可重复事件，会话保持 active）。
     """
     state = dict(conv.current_slots or {})
     if not (state.get("product_type") or {}).get("value"):
         raise err_400("请先明确要寻找的产品类型")
     pt = (state.get("product_type") or {}).get("value")
-    verdict = req_schema.validate_completion(state, pt)
-    missing = [req_schema.label_of(k, pt) for k in verdict["missing_hard"]]
+    # D7 两步化：确认框可微调 strictness（前端回传覆盖）
+    if demand_points:
+        for dp in demand_points:
+            sv = state.get(dp.key)
+            if sv and dp.key != "extended":
+                state[dp.key] = {**sv, "strictness": dp.strictness}
+    if not req_schema.validate_completion(state, pt)["done"]:
+        raise err_400("请至少补充 1 个需求点（如操作系统、认证、起订量等）后才能提交匹配")
     warnings: list[str] = []
-    if missing:
-        warnings.append("以下需求尚未明确：" + "、".join(missing) + "。已按当前信息提交匹配，可稍后继续补充并重新匹配。")
 
     version = await _next_version(db, conv.conversation_id)
     req = BuyerRequest(
@@ -491,10 +517,10 @@ async def _do_confirm(db: AsyncSession, conv: Conversation) -> tuple[BuyerReques
     return req, run, warnings
 
 
-async def confirm(db: AsyncSession, conversation_id: str, user_id: str) -> ConfirmResponse:
-    """确认需求档案并提交匹配（单端点，SC-22/25）。"""
+async def confirm(db: AsyncSession, conversation_id: str, user_id: str, demand_points=None) -> ConfirmResponse:
+    """确认需求档案并提交匹配（单端点，SC-22/25；D7 两步化：demand_points 可微调 strictness）。"""
     conv = await _load_conv(db, conversation_id)
-    req, _run, warnings = await _do_confirm(db, conv)
+    req, _run, warnings = await _do_confirm(db, conv, demand_points)
     return ConfirmResponse(request_id=str(req.request_id), version=req.version,
                            redirect_to=f"/buyer/matches/{req.request_id}", warnings=warnings)
 

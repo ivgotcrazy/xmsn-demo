@@ -47,7 +47,7 @@ async def message(
 async def confirm(
     payload: ConfirmRequest, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[ConfirmResponse]:
-    return ApiResponse(data=await conv_service.confirm(db, payload.conversation_id, user.user_id))
+    return ApiResponse(data=await conv_service.confirm(db, payload.conversation_id, user.user_id, payload.demand_points))
 
 
 # ---- 历史（6.3.5）----

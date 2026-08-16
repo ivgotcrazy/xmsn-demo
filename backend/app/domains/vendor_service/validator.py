@@ -9,7 +9,7 @@ from __future__ import annotations
 HARD_FIELDS = [
     "process_types",
     "certifications",
-    "os_support",
+    "os",
     "interfaces",
     "moq",
     "lead_time_days",
@@ -30,7 +30,7 @@ def _has_value(v: object) -> bool:
     return True
 
 
-def validate(extracted: dict) -> tuple[dict, float, dict, str]:
+def validate(extracted: dict) -> tuple[dict, float, dict, str, list]:
     """归一 structured_tags + 计算 completeness + 归一 source_map（含 confidence）+ 摘要。"""
     raw_tags = (extracted.get("structured_tags") or {})
 
@@ -64,4 +64,5 @@ def validate(extracted: dict) -> tuple[dict, float, dict, str]:
         }
 
     summary = str(extracted.get("summary_text") or "").strip()
-    return tags, completeness, source_map, summary
+    soft_tags = [str(x).strip() for x in (extracted.get("soft_tags") or []) if str(x).strip()]  # D3 软层自由标签
+    return tags, completeness, source_map, summary, soft_tags

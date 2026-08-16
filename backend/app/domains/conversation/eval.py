@@ -41,7 +41,7 @@ async def run_case(dialog: list[dict]) -> dict:
             state = agent.write_option(state, pending["key"], text)
         else:
             parsed = await agent.extract_slots(state, text, db=None)
-            state = agent.merge_slot(state, parsed.get("slot_delta", {}), parsed.get("extra_constraints", []))
+            state = agent.merge_slot(state, parsed.get("slot_delta", {}), parsed.get("extended", []))
         _next_key, _q, opts, _otype = agent.decide_question(state)
         state["_pending"] = {"key": _next_key, "options": opts} if _next_key else {}
     return _pure_slots(state)

@@ -49,6 +49,7 @@ async def _seed_vendors(db) -> None:
         vcap = VendorCapability(
             vendor_id=vendor.vendor_id,
             structured_tags=cap["structured_tags"],
+            soft_tags=cap.get("soft_tags") or [],
             summary_text=cap["summary_text"],
             completeness=1.0,
             source_type="curated",
@@ -58,8 +59,8 @@ async def _seed_vendors(db) -> None:
         )
         db.add(vcap)
         await db.flush()
-        # 双轨向量（代表向量 + 原文块溯源）
-        await vector.index_representative(str(vendor.vendor_id), cap["structured_tags"], cap["summary_text"])
+        # 双轨向量（代表向量 + 原文块溯源）——REP = embed(summary)（D9）
+        await vector.index_representative(str(vendor.vendor_id), cap["summary_text"])
         await vector.index_doc_chunks(str(vendor.vendor_id), file_id,
                                       f"{vd['company_name']}能力介绍.md", [cap["doc"]])
         created += 1

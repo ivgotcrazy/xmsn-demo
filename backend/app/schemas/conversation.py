@@ -22,11 +22,14 @@ class AssistantMessage(BaseModel):
 
 
 class DemandPoint(BaseModel):
-    """会话中萃取的单一需求点（前端「当前需求」展示单元，不感知 schema；固定/扩展由后端映射）。"""
+    """会话中萃取的单一需求点（D5：需求点 = 需求点 schema 实例；label 由品类 Schema 提供）。
+
+    value + strictness（D7 两档）；extended 扩展需求点 label 为自由展示标签（D8）。"""
 
     key: str
     label: str
     value: str | list[str]
+    strictness: Literal["strict", "best-effort"] = "best-effort"
     confidence: float = 1.0
 
 

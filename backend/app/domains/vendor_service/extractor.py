@@ -21,11 +21,12 @@ PROMPT_PARSE = """你是一个制造业能力解析专家。你的任务是分�
 # 输出Schema（严格 JSON）
 {{
   "structured_tags": {{
-    "process_types": ["string"], "certifications": ["string"], "os_support": ["string"],
+    "process_types": ["string"], "certifications": ["string"], "os": ["string"],
     "interfaces": ["string"], "moq": number, "lead_time_days": number, "monthly_capacity": number,
     "product_types": ["string"], "application_scenarios": ["string"], "customization": "string"
   }},
-  "summary_text": "一句话摘要，不超过50字",
+  "soft_tags": ["string"],
+  "summary_text": "自然语言串联全部萃取字段（含 soft_tags）的能力描述，不超过400字",
   "sources": {{
     "process_types": {{"doc_id": "...", "doc_name": "...", "page": 1, "chunk_text": "...", "confidence": 0.92}}
   }}

@@ -74,6 +74,7 @@ class VendorCapability(Base):
     vendor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vendors.vendor_id"))
     structured_tags: Mapped[dict] = mapped_column(JSONB, default=dict)
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    soft_tags: Mapped[list] = mapped_column(JSONB, default=list)  # D3 软层自由标签（本体外能力）
     # 档案版本（每次重新解析增/删文档 +1）、基于文档数、完备度、字段级溯源+置信度
     version: Mapped[int] = mapped_column(Integer, default=1)
     doc_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -199,12 +200,15 @@ class MatchResult(Base):
     vendor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vendors.vendor_id"))
     match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     semantic_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    param_hit_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
-    critical_fail: Mapped[bool] = mapped_column(Boolean, default=False)
+    param_hit_rate: Mapped[float | None] = mapped_column(Float, nullable=True)  # 兼容旧数据（D10 后不再写入）
+    critical_fail: Mapped[bool] = mapped_column(Boolean, default=False)  # 兼容旧数据（D10 移除）
     match_source: Mapped[str] = mapped_column(String(10), default="llm")
     matched_params: Mapped[list] = mapped_column(JSONB, default=list)
     partial_params: Mapped[list] = mapped_column(JSONB, default=list)
+    missing_params: Mapped[list] = mapped_column(JSONB, default=list)  # D10 四档：missing 独立成组
     unmatched_params: Mapped[list] = mapped_column(JSONB, default=list)
+    match_reason: Mapped[str | None] = mapped_column(Text, nullable=True)  # D4 顾问级解释
+    risk_warning: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

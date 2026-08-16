@@ -1,15 +1,17 @@
-"""通道A 语义检索（T4.1）——《匹配详细设计》第 3 章。
+"""Stage1 语义召回（T4.1）——《匹配详细设计》第 3 章 + AI核心 §5.3.2。
 
-职责：需求向量在 `vendor_representative` 集合 ANN 检索 Top-K 厂商候选，产出 semantic_score。
-- 需求向量化文本：demand_embedding_text（3.2）
-- 参数：top_k=50、min_semantic=0.35（低于阈值不进候选，节省通道B LLM 调用）
-- 边界：只负责"相关召回"；不读原文块（doc_chunks 仅供溯源）
+职责：在 **Stage0 passed 集内**做**两路 ANN**：路径A 代表向量（vendor_representative）+ 路径B 原文块（doc_chunks），
+semantic_score = max(rep, chunk)，**只做召回不进最终分**（D9/D10）。
+- 需求向量化文本：demand_embedding_text（D9 自然语言模板，与厂商 summary 同构保证向量对称）
+- 参数：top_k=50、min_semantic≈0.35（待评估，§5.3.6②）
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
+from app.domains import ontology
 from app.llm.embedding import embed
 from app.vector.client import CHUNK_COLLECTION, REP_COLLECTION, get_client
 
@@ -31,29 +33,51 @@ def _norm_slot(sv):
 
 
 def demand_embedding_text(demand: dict) -> str:
-    """需求快照（三态 structured_demand）→ 向量化文本（3.2）。排除/通配/空值不拼入。"""
+    """需求档案（正向点快照 D6/D7/D8）→ 自然语言需求描述（D9，与厂商 summary 同构保证向量对称）。"""
+    demand = demand or {}
+    dims = demand.get("dimensions")
     parts: list[str] = []
-    for k, sv in (demand or {}).items():
-        v, st = _norm_slot(sv)
-        if st in ("excluded", "wildcard"):
-            continue
-        if v is None or v == "" or v == []:
-            continue
-        parts.append(f"{k}:{'、'.join(str(x) for x in v) if isinstance(v, list) else v}")
-    extra = demand.get("extra_constraints")
-    if isinstance(extra, list):
-        for c in extra:
-            parts.append(f"约束:{c}")
-    return " ".join(parts).strip()
+    if isinstance(dims, dict):
+        pt_sv = dims.get("product_type") or {}
+        pt = pt_sv.get("value") if isinstance(pt_sv, dict) else None
+        for key, sv in dims.items():
+            if not isinstance(sv, dict):
+                continue
+            v = sv.get("value")
+            if v in (None, "", []):
+                continue
+            label = ontology.label_of(key, pt)
+            val = "、".join(str(x) for x in v) if isinstance(v, list) else str(v)
+            parts.append(f"{label}{val}")
+    else:
+        # 兼容旧快照（扁平 key: value）
+        for k, sv in demand.items():
+            v, st = _norm_slot(sv)
+            if st in ("excluded", "wildcard") or v in (None, "", []):
+                continue
+            label = ontology.label_of(k)
+            val = "、".join(str(x) for x in v) if isinstance(v, list) else str(v)
+            parts.append(f"{label}{val}")
+    for e in demand.get("extended", []) or []:
+        if isinstance(e, dict) and e.get("value"):
+            parts.append(str(e["value"]))
+        elif isinstance(e, str) and e.strip():
+            parts.append(e.strip())
+    return "，".join(parts).strip()
 
 
-def _search_sync(qvec: list[float], top_k: int, min_score: float) -> list[dict]:
-    """同步 Milvus ANN（vendor_representative）。返回 [{vendor_id, semantic_score}]。"""
+def _filter_expr(passed_ids: list[str] | None) -> str | None:
+    return f'vendor_id in {json.dumps(passed_ids)}' if passed_ids else None
+
+
+def _search_sync(qvec: list[float], top_k: int, min_score: float, passed_ids: list[str] | None = None) -> list[dict]:
+    """路径A：vendor_representative ANN（passed 集内）。返回 [{vendor_id, semantic_score, recall_source}]。"""
     client = get_client()
     res = client.search(
         REP_COLLECTION,
         data=[qvec],
         limit=top_k * 2,
+        filter=_filter_expr(passed_ids),
         output_fields=["vendor_id"],
         search_params={"metric_type": "COSINE", "params": {}},
     )
@@ -65,17 +89,52 @@ def _search_sync(qvec: list[float], top_k: int, min_score: float) -> list[dict]:
         vid = hit.get("entity", {}).get("vendor_id")
         if not vid:
             continue
-        out.append({"vendor_id": vid, "semantic_score": score})
+        out.append({"vendor_id": vid, "semantic_score": score, "recall_source": "rep"})
     return out[:top_k]
 
 
-async def retrieve(demand: dict, top_k: int = TOP_K, min_score: float = MIN_SEMANTIC) -> list[dict]:
-    """需求 → Top-K 厂商候选（vendor_id + semantic_score）。embedding 失败由 service 兜底降级。"""
+def _search_chunks_all_sync(qvec: list[float], top_k: int, min_score: float, passed_ids: list[str] | None = None) -> list[dict]:
+    """路径B：doc_chunks 原文块 ANN（passed 集内），按厂商聚合并取最高分。"""
+    client = get_client()
+    res = client.search(
+        CHUNK_COLLECTION,
+        data=[qvec],
+        limit=top_k * 4,
+        filter=_filter_expr(passed_ids),
+        output_fields=["vendor_id"],
+        search_params={"metric_type": "COSINE", "params": {}},
+    )
+    best: dict[str, float] = {}
+    for hit in (res[0] if res else []):
+        score = float(hit.get("distance", 0.0))
+        if score < min_score:
+            continue
+        vid = hit.get("entity", {}).get("vendor_id")
+        if not vid:
+            continue
+        if vid not in best or score > best[vid]:
+            best[vid] = score
+    return [{"vendor_id": k, "semantic_score": v, "recall_source": "chunk"} for k, v in best.items()]
+
+
+async def retrieve(demand: dict, top_k: int = TOP_K, min_score: float = MIN_SEMANTIC,
+                   passed_ids: list[str] | None = None) -> list[dict]:
+    """Stage1：passed 内两路 ANN（REP ∪ 原文块），semantic_score = max（只做召回）。"""
     text = demand_embedding_text(demand)
     if not text:
         return []
     [qvec] = await embed([text])
-    return await asyncio.to_thread(_search_sync, qvec, top_k, min_score)
+    rep, chk = await asyncio.gather(
+        asyncio.to_thread(_search_sync, qvec, top_k, min_score, passed_ids),
+        asyncio.to_thread(_search_chunks_all_sync, qvec, top_k, min_score, passed_ids),
+    )
+    merged: dict[str, dict] = {}
+    for c in rep + chk:
+        vid = c["vendor_id"]
+        if vid not in merged or c["semantic_score"] > merged[vid]["semantic_score"]:
+            merged[vid] = c
+    out = sorted(merged.values(), key=lambda x: -x["semantic_score"])[:top_k]
+    return out
 
 
 def _search_chunks_sync(vendor_id: str, qvec: list[float], top_k: int) -> list[dict]:
@@ -152,7 +211,7 @@ def _tags_hit(demand_vals: dict, tags: dict) -> bool:
     """已指定需求值 与 厂商标签 是否有交集（product_type/os/interfaces/certifications）。"""
     mapping = {
         "product_type": "product_types",
-        "os": "os_support",
+        "os": "os",
         "interfaces": "interfaces",
         "certifications": "certifications",
     }

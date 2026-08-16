@@ -63,21 +63,19 @@ async def _explain_match(match_id: str) -> None:
             logger.info("explain empty for %s (保留打分判定)", match_id)
             return
         matched = [p for p in result["params"] if p["verdict"] == "matched"]
-        partial = []
-        unmatched = []
-        for p in result["params"]:
-            if p["verdict"] in ("partial", "missing"):
-                # missing（厂商未声明）语义并入 partial（需协商）；契约 MatchParam 仅 3 值
-                partial.append({**p, "verdict": "partial"})
-            elif p["verdict"] == "unmatched":
-                unmatched.append(p)
+        partial = [p for p in result["params"] if p["verdict"] == "partial"]
+        missing = [p for p in result["params"] if p["verdict"] == "missing"]
+        unmatched = [p for p in result["params"] if p["verdict"] == "unmatched"]
         mr.matched_params = matched
         mr.partial_params = partial
+        mr.missing_params = missing  # D10：missing 独立成组（不再并入 partial）
         mr.unmatched_params = unmatched
-        mr.ai_comment = result["ai_comment"]
+        mr.match_reason = result.get("match_reason")  # D4 顾问级解释
+        mr.risk_warning = result.get("risk_warning")
+        mr.ai_comment = result.get("ai_comment")
         await db.commit()
-        logger.info("explain done: %s (matched=%d partial=%d unmatched=%d)",
-                    match_id, len(matched), len(partial), len(unmatched))
+        logger.info("explain done: %s (matched=%d partial=%d missing=%d unmatched=%d)",
+                    match_id, len(matched), len(partial), len(missing), len(unmatched))
 
 
 async def _parse_capability(capability_id: str) -> None:
@@ -101,8 +99,9 @@ async def _parse_capability(capability_id: str) -> None:
         document_text = "\n\n".join(doc_texts)
         try:
             extracted = await extractor.extract(document_text)
-            tags, completeness, source_map, summary = validator.validate(extracted)
+            tags, completeness, source_map, summary, soft_tags = validator.validate(extracted)
             cap.structured_tags = tags
+            cap.soft_tags = soft_tags
             cap.completeness = completeness
             cap.source_map = source_map
             cap.summary_text = summary
@@ -117,7 +116,7 @@ async def _parse_capability(capability_id: str) -> None:
         vendor_id = str(cap.vendor_id)
         try:
             await vector.delete_vendor_vectors(vendor_id)
-            await vector.index_representative(vendor_id, tags, summary)
+            await vector.index_representative(vendor_id, summary)
             for ref, pages in docs:
                 await vector.index_doc_chunks(vendor_id, ref["file_id"], ref["name"], pages)
             logger.info("capability indexed: %s", capability_id)

@@ -1,9 +1,9 @@
-"""匹配解释生成（T5.1/T5.2）——《匹配详细设计》第 8.5 章。
+"""匹配解释生成（T5.1/T5.2）——《匹配详细设计》第 8.5 章 + AI核心 §5.3.5（Stage4）。
 
-- 与打分解耦（8.3）：compute 只打分，解释由异步 worker 生成
+- 与打分解耦：compute 只打分，解释由异步 worker 生成
 - 输入：需求快照 + 单厂商能力 + 候选原文块（doc_chunks 溯源）
-- 输出：params 三组（带 note + source）+ ai_comment；verdict 枚举校验；非法整条丢弃
-- source 用于"查看原文"定位（doc_id/page/chunk_text）
+- 输出：params **四组**（matched/partial/missing/unmatched，missing 独立 D10）+ match_reason + risk_warning + ai_comment（D4）
+- 只对 Stage3 的 TopK 生成（§5.3.5：解释范围 = TopK）
 """
 from __future__ import annotations
 
@@ -40,13 +40,17 @@ EXPLAIN_PROMPT = """你是一个供需匹配分析专家。给定买家的需求
       "source": {{"doc_id": "...", "doc_name": "...", "page": 3, "chunk_text": "原文片段"}}
     }}
   ],
+  "match_reason": "为什么匹配/不匹配（顾问级，30-80字）",
+  "risk_warning": "风险提示：strict（必须）需求未满足项与关键风险（无风险则空字符串）",
   "ai_comment": "一句话综合评语，20-50字"
 }}
 
 # 规则
 1. matched=完全满足；partial=需协商（如交期30 vs 45）；missing=厂商未声明该能力；unmatched=明确不满足
 2. 每个判定尽量附 source（从厂商原文片段中选取对应出处；找不到可置 null）
-3. ai_comment 要客观，指出优势和不足
+3. match_reason 顾问级解释（D4）：说明主要匹配点与不足，替代旧"佐证式"罗列；
+4. risk_warning 聚焦 strict（必须）需求：某 strict 点 unmatched/partial 时重点提示；无则空字符串。
+5. ai_comment 要客观，指出优势和不足
 """
 
 
@@ -130,7 +134,8 @@ async def generate(demand: dict, capability: dict, chunks: list[dict]) -> dict:
                     "chunk_text": src.get("chunk_text"),
                 } if isinstance(src, dict) and src.get("doc_id") else None,
             })
-        return {"params": params, "ai_comment": data.get("ai_comment")}
+        return {"params": params, "match_reason": data.get("match_reason"),
+                "risk_warning": data.get("risk_warning"), "ai_comment": data.get("ai_comment")}
     except Exception as exc:  # noqa: BLE001
         logger.warning("explain generation failed: %s", exc)
-        return {"params": [], "ai_comment": None}
+        return {"params": [], "match_reason": None, "risk_warning": None, "ai_comment": None}

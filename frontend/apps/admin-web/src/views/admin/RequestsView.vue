@@ -277,7 +277,7 @@ onMounted(async () => {
           >
             <span class="requests-page__match-mark">{{ m.company_name.slice(0, 1) }}</span>
             <span class="name">{{ m.company_name }}</span>
-            <NTag v-if="m.critical_fail" size="tiny" type="error" :bordered="false">关键参数不符</NTag>
+            <NTag v-if="(m.missing_count ?? 0) > 0" size="tiny" type="warning" :bordered="false">未声明 {{ m.missing_count }}</NTag>
             <span class="score">{{ m.match_score.toFixed(1) }} 分</span>
           </div>
         </div>

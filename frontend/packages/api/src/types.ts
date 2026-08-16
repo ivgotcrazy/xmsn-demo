@@ -277,6 +277,7 @@ export type DemandPoint = {
   key: string;
   label: string;
   value: (string | string[]);
+  strictness?: "strict" | "best-effort";
   confidence?: number;
 };
 export type DocumentPreviewResponse = {
@@ -332,7 +333,10 @@ export type MatchDetailResponse = {
   company_name: string;
   matched_params?: MatchParam[];
   partial_params?: MatchParam[];
+  missing_params?: MatchParam[];
   unmatched_params?: MatchParam[];
+  match_reason?: (string | null);
+  risk_warning?: (string | null);
   ai_comment?: (string | null);
   explanation_status?: "pending" | "ready";
 };
@@ -344,17 +348,18 @@ export type MatchItem = {
   summary?: (string | null);
   match_score: number;
   semantic_score?: (number | null);
-  param_hit_rate?: (number | null);
-  critical_fail?: boolean;
   match_source?: "llm" | "rule" | "hybrid";
   matched_count?: number;
+  partial_count?: number;
+  missing_count?: number;
   unmatched_count?: number;
 };
 export type MatchParam = {
   key: string;
   label: string;
   value: string;
-  verdict: "matched" | "partial" | "unmatched";
+  verdict: "matched" | "partial" | "missing" | "unmatched";
+  strictness?: "strict" | "best-effort";
   source_doc_id?: (string | null);
   source_doc_name?: (string | null);
   source_page?: (number | null);

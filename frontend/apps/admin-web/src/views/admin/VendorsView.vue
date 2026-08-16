@@ -75,9 +75,9 @@ const TAG_LABEL: Record<string, string> = {
   product_types: "产品类型",
   process_types: "工艺",
   certifications: "认证",
-  os_support: "操作系统",
+  os: "操作系统",
   interfaces: "接口",
-  min_order_qty: "起订量",
+  moq: "起订量",
   lead_time_days: "交期(天)",
   application_scenarios: "应用场景",
 }

@@ -5,7 +5,7 @@
  */
 import { h, nextTick, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
-import { NButton, NInput, NPopconfirm, NTag, useMessage } from "naive-ui"
+import { NButton, NInput, NModal, NPopconfirm, NTag, useMessage } from "naive-ui"
 
 import {
   conversationConfirm,
@@ -33,8 +33,11 @@ const messages = ref<{ role: "assistant" | "user"; content: string; error?: bool
 const options = ref<string[]>([])
 const optionsType = ref<"none" | "single" | "multi" | "actions">("none")
 const input = ref("")
-// 前端「当前需求」：基于会话历史萃取的需求点集合（不感知 schema）
+// 前端「当前需求」：基于会话历史萃取的需求点集合（schema 实例 + strictness，D5/D7）
 const demandPoints = ref<DemandPoint[]>([])
+// D7 两步化：确认框（strictness 可微调）→ 正式提交
+const confirmOpen = ref(false)
+const editablePoints = ref<DemandPoint[]>([])
 const version = ref<number | null>(null)
 const conversationId = ref("")
 const sending = ref(false)
@@ -254,9 +257,9 @@ async function send(text?: string, clickedOption?: string | string[] | null): Pr
 }
 
 function pick(value: string | string[]): void {
-  // "确认并提交匹配"直接提交（单端点）；"继续补充"继续对话；多选提交数组；单选/动作提交单值
+  // "确认并提交匹配" → 两步化确认框（D7）；"继续补充"继续对话；多选提交数组；单选/动作提交单值
   if (typeof value === "string" && value === "确认并提交匹配") {
-    void confirm()
+    void openConfirm()
     return
   }
   if (typeof value === "string" && value === "继续补充") {
@@ -271,24 +274,44 @@ function pick(value: string | string[]): void {
   void send(value, value) // 单选/动作：点击即提交
 }
 
-async function confirm(): Promise<void> {
+function displayVal(v: string | string[]): string {
+  return Array.isArray(v) ? v.join("、") : v
+}
+
+/** D7 两步化第一步：打开确认框（只读展示需求点 + strictness，可微调） */
+function openConfirm(): void {
   if (!conversationId.value) return
-  // 产品类型未明确时提示（匹配锚点）
+  // D12：品类锚定 + 至少 1 个需求点（品类外）
   if (!hasProductType()) {
     message.warning("请先明确要寻找的产品类型")
     return
   }
+  const others = demandPoints.value.filter((p) => p.key !== "product_type")
+  if (others.length === 0) {
+    message.warning("请至少补充 1 个需求点（如操作系统、认证、起订量等）后才能提交匹配")
+    return
+  }
+  editablePoints.value = demandPoints.value.map((p) => ({
+    ...p,
+    value: Array.isArray(p.value) ? [...p.value] : p.value,
+  }))
+  confirmOpen.value = true
+}
+
+/** 确认框内 strictness 切换（D7 可微调） */
+function toggleStrictness(p: DemandPoint): void {
+  p.strictness = p.strictness === "strict" ? "best-effort" : "strict"
+}
+
+async function confirm(): Promise<void> {
+  confirmOpen.value = false
+  if (!conversationId.value) return
   try {
     const res = await conversationConfirm({
       conversation_id: conversationId.value,
-      demand_points: demandPoints.value,
+      demand_points: editablePoints.value,
     })
-    // SC-25：硬约束缺项 → 显著警示（不静默）；否则成功提示
-    if (res.warnings?.length) {
-      res.warnings.forEach((w) => message.warning(w))
-    } else {
-      message.success("已提交匹配")
-    }
+    message.success("已提交匹配")
     // 02A 匹配记录：不跳页，刷新匹配记录并首次自动弹出结果
     await loadRecords()
     // 提交后进入该次匹配的结果页（返回回会话页）
@@ -471,7 +494,7 @@ onMounted(() => {
               <DemandProfileCard :points="demandPoints" />
             </div>
             <div v-if="hasProductType() && !asideCollapsed" class="chat-page__demand-footer">
-              <NButton type="primary" block @click="confirm()">提交匹配 →</NButton>
+              <NButton type="primary" block @click="openConfirm()">提交匹配 →</NButton>
             </div>
           </div>
 
@@ -525,6 +548,30 @@ onMounted(() => {
         </aside>
       </div>
     </div>
+
+    <!-- D7 两步化：提交确认框（strictness 只读展示、可微调） -->
+    <NModal v-model:show="confirmOpen" preset="card" title="确认提交匹配" style="width: 580px">
+      <div class="chat-confirm__hint">请确认需求点与严格度（必须/尽力可切换），提交后开始匹配。</div>
+      <div v-if="editablePoints.length" class="chat-confirm__list">
+        <div v-for="(p, i) in editablePoints" :key="i" class="chat-confirm__row">
+          <span class="chat-confirm__label">{{ p.label }}</span>
+          <span class="chat-confirm__value">{{ displayVal(p.value) }}</span>
+          <NButton
+            size="tiny"
+            :type="p.strictness === 'strict' ? 'warning' : 'default'"
+            @click="toggleStrictness(p)"
+          >
+            {{ p.strictness === "strict" ? "必须" : "尽力" }}
+          </NButton>
+        </div>
+      </div>
+      <template #footer>
+        <div class="chat-confirm__actions">
+          <NButton @click="confirmOpen = false">取消</NButton>
+          <NButton type="primary" @click="confirm()">确认提交</NButton>
+        </div>
+      </template>
+    </NModal>
   </div>
 </template>
 

@@ -22,11 +22,18 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
       <div class="match-item__head">
         <span class="match-item__name">{{ item.company_name }}</span>
         <NTag size="small" :bordered="false">{{ SOURCE_LABEL[item.match_source ?? "llm"] ?? item.match_source }}</NTag>
-        <NTag v-if="item.critical_fail" size="small" type="error" :bordered="false">关键参数不符</NTag>
+        <NTag v-if="(item.missing_count ?? 0) > 0" size="small" type="warning" :bordered="false">
+          未声明 {{ item.missing_count }}
+        </NTag>
       </div>
       <div v-if="item.summary" class="match-item__summary">{{ item.summary }}</div>
       <div class="match-item__meta">
-        {{ item.location ?? "—" }} · 参数 {{ (item.matched_count ?? 0) + (item.unmatched_count ?? 0) }} 项
+        {{ item.location ?? "—" }} · 匹配 {{ item.matched_count ?? 0 }}/{{
+          (item.matched_count ?? 0) +
+          (item.partial_count ?? 0) +
+          (item.missing_count ?? 0) +
+          (item.unmatched_count ?? 0)
+        }} 项
       </div>
     </div>
     <div class="match-item__score">

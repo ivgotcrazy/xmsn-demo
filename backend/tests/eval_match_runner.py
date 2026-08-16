@@ -17,12 +17,21 @@ from app.db.session import SessionLocal
 from app.domains.match_service import service as match_service
 
 
+def _has_anchor(demand: dict | None) -> bool:
+    """正向点快照（D6/D7/D8）：品类锚点 = dimensions.product_type；兼容旧扁平快照。"""
+    dims = (demand or {}).get("dimensions") or {}
+    pt = (dims.get("product_type") or {}).get("value")
+    if pt:
+        return True
+    return bool((demand or {}).get("product_type"))
+
+
 async def main():
     async with SessionLocal() as db:
         reqs = (await db.execute(
             select(BuyerRequest).where(BuyerRequest.deleted_at.is_(None))
         )).scalars().all()
-        reqs = [r for r in reqs if (r.structured_demand or {}).get("product_type")]
+        reqs = [r for r in reqs if _has_anchor(r.structured_demand)]
         print(f"需求快照: {len(reqs)} 条（含品类锚点）")
 
         cases = []

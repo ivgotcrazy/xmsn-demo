@@ -5,55 +5,51 @@
  */
 export * from "@xmsn/api"
 
-// ============ 需求 Schema 品类（架构 6.6） ============
+// ============ 需求 Schema 品类（本体 D1，供需Schema §3.4/3.5） ============
 export type ParamKey =
-  | "product_type"
-  | "os_support"
-  | "certifications"
-  | "application_scenes"
-  | "interfaces"
-  | "min_order_qty"
-  | "process"
-  | "lead_time_days"
-  | "customization"
+  | "product_type" | "certifications" | "moq" | "lead_time_days" | "monthly_capacity"
+  | "process_types" | "application_scenario" | "customization_needs" | "budget_range"
+  | "service_years" | "industry_cases" | "os" | "interfaces" | "wireless"
+  | "mic_array" | "speaker_power" | "voice_assistant" | "decode_capability"
+  | "soc_platform" | "tv_standard" | "output_interfaces" | "memory_storage"
+  | "comm_protocol" | "power_supply" | "ip_rating" | "sensors" | "extended"
 
 export interface ParamFieldMeta {
   key: ParamKey
   label: string
-  /** multi 表示多值（数组），single 单值，number 数值 */
-  kind: "multi" | "single" | "number"
+  /** multi 表示多值（数组），single 单值，number 数值，text 自由文本（本体 value_type） */
+  kind: "multi" | "single" | "number" | "text"
   options?: string[]
-  /** 参数匹配权重（架构 6.6 权重表） */
-  weight: number
-  /** 关键参数：LLM verdict critical_fail 时封顶 50% */
-  critical?: boolean
-  /** 是否允许用户显式排除 */
-  excludable?: boolean
 }
 
-/** 需求 Schema 字段元信息（与后端 params.yaml / 权重表一致） */
+/** 需求 Schema 字段元信息（PoC 展示 fallback；权威=后端本体 ontology.json，D5 schema 感知） */
 export const REQUEST_SCHEMA_FIELDS: ParamFieldMeta[] = [
-  { key: "product_type", label: "产品类型", kind: "single", weight: 2.0, critical: true },
-  { key: "os_support", label: "操作系统", kind: "multi", weight: 1.5, critical: true },
-  { key: "certifications", label: "认证", kind: "multi", weight: 1.5 },
-  { key: "application_scenes", label: "应用场景", kind: "multi", weight: 1.0 },
-  { key: "interfaces", label: "接口", kind: "multi", weight: 1.0 },
-  { key: "min_order_qty", label: "起订量", kind: "number", weight: 1.0 },
-  { key: "process", label: "工艺", kind: "multi", weight: 0.5 },
-  { key: "lead_time_days", label: "交期(天)", kind: "number", weight: 0.5 },
-  { key: "customization", label: "定制化", kind: "single", weight: 0.5, excludable: true },
+  { key: "product_type", label: "产品类型", kind: "single" },
+  { key: "certifications", label: "认证", kind: "multi" },
+  { key: "moq", label: "起订量", kind: "number" },
+  { key: "lead_time_days", label: "交期(天)", kind: "number" },
+  { key: "monthly_capacity", label: "月产能", kind: "number" },
+  { key: "process_types", label: "制程能力", kind: "multi" },
+  { key: "application_scenario", label: "应用场景", kind: "text" },
+  { key: "customization_needs", label: "定制需求", kind: "text" },
+  { key: "budget_range", label: "预算范围", kind: "text" },
+  { key: "service_years", label: "服务年限", kind: "number" },
+  { key: "industry_cases", label: "行业经验/案例", kind: "text" },
+  { key: "os", label: "操作系统", kind: "multi" },
+  { key: "interfaces", label: "接口", kind: "multi" },
+  { key: "wireless", label: "无线", kind: "multi" },
 ]
 
 export const PARAM_LABELS: Record<string, string> = Object.fromEntries(
   REQUEST_SCHEMA_FIELDS.map((f) => [f.key, f.label]),
 )
 
-// ============ 厂商能力 Schema（供给侧，匹配硬/软分层） ============
-/** 能力字段 key（厂商能力坐标系，与匹配 PARAM_MAP 厂商侧字段对齐）。 */
+// ============ 厂商能力 Schema（供给侧，本体同 key D1） ============
+/** 能力字段 key（与需求侧同 key，D1；硬能力=RULE 判定主锚） */
 export type CapabilityKey =
   | "process_types"
   | "certifications"
-  | "os_support"
+  | "os"
   | "interfaces"
   | "moq"
   | "lead_time_days"
@@ -80,7 +76,7 @@ export interface CapabilityFieldMeta {
 export const CAPABILITY_SCHEMA_FIELDS: CapabilityFieldMeta[] = [
   { key: "process_types", label: "工艺", kind: "multi", hard: true, suggest: "建议补充「工艺/产线能力」文档" },
   { key: "certifications", label: "认证", kind: "multi", hard: true, suggest: "建议补充「认证证书」文档" },
-  { key: "os_support", label: "操作系统", kind: "multi", hard: true, suggest: "建议补充「支持系统/平台」文档" },
+  { key: "os", label: "操作系统", kind: "multi", hard: true, suggest: "建议补充「支持系统/平台」文档" },
   { key: "interfaces", label: "接口", kind: "multi", hard: true, suggest: "建议补充「接口规格」文档" },
   { key: "moq", label: "起订量", kind: "number", hard: true, suggest: "建议补充「报价/产能参数」文档" },
   { key: "lead_time_days", label: "交期(天)", kind: "number", hard: true, suggest: "建议补充「交期/生产周期」文档" },
@@ -94,12 +90,13 @@ export const CAPABILITY_LABELS: Record<string, string> = Object.fromEntries(
   CAPABILITY_SCHEMA_FIELDS.map((f) => [f.key, f.label]),
 )
 
-// ============ 匹配三态（架构 6.3 匹配） ============
-export type Verdict = "matched" | "partial" | "unmatched"
+// ============ 匹配四档（D10：missing 独立成组） ============
+export type Verdict = "matched" | "partial" | "missing" | "unmatched"
 
-export const VERDICT_META: Record<Verdict, { label: string; tagType: "success" | "warning" | "error" }> = {
+export const VERDICT_META: Record<Verdict, { label: string; tagType: "success" | "warning" | "default" | "error" }> = {
   matched: { label: "已匹配", tagType: "success" },
   partial: { label: "部分匹配", tagType: "warning" },
+  missing: { label: "未声明", tagType: "default" },
   unmatched: { label: "未匹配", tagType: "error" },
 }
 

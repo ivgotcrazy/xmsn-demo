@@ -1,0 +1,68 @@
+{
+  "version": "v1",
+  "_说明": "供需双侧单一本体（D1）。来源《供需Schema设计.md》§3.4 通用 / §3.5 品类+消费电子通用 / §2 维度元数据。level/optional 为兼容层推导，不在此配置（D11 已移除 demand_level）。",
+  "general": [
+    {"key": "product_type", "label": "产品类型", "provenance": "general", "value_type": "scalar", "kind": "single",
+     "options": ["机顶盒", "智能音箱", "IoT设备"], "direction": null, "unit": null, "applicable": "both"},
+    {"key": "certifications", "label": "认证", "provenance": "general", "value_type": "enum", "kind": "multi",
+     "options": ["CE", "FCC", "CCC", "SRRC", "ISO9001", "其他"], "direction": null, "unit": null, "applicable": "both"},
+    {"key": "moq", "label": "起订量", "provenance": "general", "value_type": "number", "kind": "single",
+     "options": null, "direction": "upper", "unit": "台", "compare_tolerance": 1.5, "applicable": "both"},
+    {"key": "lead_time_days", "label": "交期(天)", "provenance": "general", "value_type": "number", "kind": "single",
+     "options": null, "direction": "upper", "unit": "天", "compare_tolerance": 1.5, "applicable": "both"},
+    {"key": "monthly_capacity", "label": "月产能", "provenance": "general", "value_type": "number", "kind": "single",
+     "options": null, "direction": "lower", "unit": "台", "compare_tolerance": 1.5, "applicable": "both"},
+    {"key": "process_types", "label": "制程能力", "provenance": "general", "value_type": "enum", "kind": "multi",
+     "options": null, "direction": null, "unit": null, "applicable": "both"},
+    {"key": "application_scenario", "label": "应用场景", "provenance": "general", "value_type": "text", "kind": "single",
+     "options": null, "direction": null, "unit": null, "applicable": "demand"},
+    {"key": "customization_needs", "label": "定制需求", "provenance": "general", "value_type": "text", "kind": "single",
+     "options": null, "direction": null, "unit": null, "applicable": "demand"},
+    {"key": "budget_range", "label": "预算范围", "provenance": "general", "value_type": "text", "kind": "single",
+     "options": null, "direction": null, "unit": null, "applicable": "demand"},
+    {"key": "service_years", "label": "服务年限", "provenance": "general", "value_type": "number", "kind": "single",
+     "options": null, "direction": "lower", "unit": "年", "compare_tolerance": 1.5, "applicable": "both"},
+    {"key": "industry_cases", "label": "行业经验/案例", "provenance": "general", "value_type": "text", "kind": "single",
+     "options": null, "direction": null, "unit": null, "applicable": "both"}
+  ],
+  "shared_groups": {
+    "consumer_electronics": [
+      {"key": "os", "label": "操作系统", "provenance": "category", "value_type": "enum", "kind": "multi",
+       "options": ["Linux", "Android", "RTOS", "其他"], "direction": null, "unit": null, "applicable": "both"},
+      {"key": "interfaces", "label": "接口", "provenance": "category", "value_type": "enum", "kind": "multi",
+       "options": ["网口", "USB", "HDMI", "GPIO", "其他"], "direction": null, "unit": null, "applicable": "both"},
+      {"key": "wireless", "label": "无线", "provenance": "category", "value_type": "enum", "kind": "multi",
+       "options": ["WiFi", "蓝牙", "无"], "direction": null, "unit": null, "applicable": "both"}
+    ]
+  },
+  "categories": {
+    "智能音箱": {
+      "extends": ["consumer_electronics"],
+      "fields": [
+        {"key": "mic_array", "label": "麦克风阵列", "value_type": "enum", "kind": "single", "options": ["2麦", "4麦", "6麦"]},
+        {"key": "speaker_power", "label": "喇叭功率", "value_type": "enum", "kind": "single", "options": ["3W", "5W", "10W"]},
+        {"key": "voice_assistant", "label": "语音助手", "value_type": "enum", "kind": "single", "options": ["自研", "接入第三方"]}
+      ]
+    },
+    "机顶盒": {
+      "extends": ["consumer_electronics"],
+      "fields": [
+        {"key": "decode_capability", "label": "解码能力", "value_type": "enum", "kind": "multi", "options": ["H.264", "H.265", "AV1", "HDR"]},
+        {"key": "soc_platform", "label": "主控平台", "value_type": "enum", "kind": "single", "options": ["Amlogic", "Allwinner", "HiSilicon", "Rockchip"]},
+        {"key": "tv_standard", "label": "电视制式", "value_type": "enum", "kind": "multi", "options": ["DVB-C", "DVB-T", "ATSC", "ISDB", "无"]},
+        {"key": "output_interfaces", "label": "输出接口", "value_type": "enum", "kind": "multi", "options": ["HDMI", "AV", "SPDIF"],
+         "depends_on": [{"key": "interfaces", "values": ["HDMI"]}]},
+        {"key": "memory_storage", "label": "存储配置", "value_type": "scalar", "kind": "single"}
+      ]
+    },
+    "IoT设备": {
+      "extends": ["consumer_electronics"],
+      "fields": [
+        {"key": "comm_protocol", "label": "通信协议", "value_type": "enum", "kind": "multi", "options": ["BLE", "WiFi", "Zigbee", "LoRa", "NB-IoT", "4G"]},
+        {"key": "power_supply", "label": "供电方式", "value_type": "enum", "kind": "single", "options": ["电池", "市电", "USB"]},
+        {"key": "ip_rating", "label": "防护等级", "value_type": "enum", "kind": "single", "options": ["IP54", "IP65", "无"]},
+        {"key": "sensors", "label": "传感器", "value_type": "enum", "kind": "multi", "options": ["温度", "湿度", "运动", "无"]}
+      ]
+    }
+  }
+}

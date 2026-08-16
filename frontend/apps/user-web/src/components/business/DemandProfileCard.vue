@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 需求档案卡片（COMP-019）：基于会话历史萃取的需求点列表（固定/扩展统一展示，不感知 schema）。
+ * 需求档案卡片（COMP-019，D5）：当前需求 = 需求点实例（label 由品类 Schema 提供）
+ * + strictness 两档徽标（D7：必须/尽力）。
  */
 import { NTag } from "naive-ui"
 
@@ -9,6 +10,11 @@ import type { DemandPoint } from "@xmsn/api"
 defineProps<{
   points: DemandPoint[]
 }>()
+
+const STRICTNESS_META: Record<string, { label: string; type: "warning" | "default" }> = {
+  strict: { label: "必须", type: "warning" },
+  "best-effort": { label: "尽力", type: "default" },
+}
 
 function displayValue(v: string | string[]): string {
   return Array.isArray(v) ? v.join("、") : v
@@ -24,8 +30,10 @@ function displayValue(v: string | string[]): string {
       <li v-for="p in points" :key="p.key">
         <div class="demand-profile__row">
           <NTag size="small">{{ p.label }}</NTag>
-          <span v-if="p.confidence !== undefined" class="demand-profile__conf">
-            {{ Math.round((p.confidence ?? 0) * 100) }}%
+          <span class="demand-profile__strict">
+            <NTag v-if="p.strictness" size="tiny" :type="STRICTNESS_META[p.strictness]?.type ?? 'default'" :bordered="false">
+              {{ STRICTNESS_META[p.strictness]?.label ?? p.strictness }}
+            </NTag>
           </span>
         </div>
         <div class="demand-profile__value">{{ displayValue(p.value) }}</div>
@@ -63,6 +71,9 @@ function displayValue(v: string | string[]): string {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-8);
+}
+.demand-profile__strict {
+  display: inline-flex;
 }
 .demand-profile__value {
   color: var(--color-text);
