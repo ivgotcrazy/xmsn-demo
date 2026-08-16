@@ -108,12 +108,19 @@ def _slots_snapshot(state: dict) -> dict:
     只存明确指定的需求点（value 非空）；wildcard/排除不落档（D6）。
     """
     pt = (state.get("product_type") or {}).get("value") if state.get("product_type") else None
+    num_keys = {f["key"] for f in req_schema.fields_for(pt) if f.get("value_type") == "number"}
     dims: dict = {}
     for k, sv in state.items():
         if k.startswith("_") or k == "extended":
             continue
         if isinstance(sv, dict) and not _is_empty(sv.get("value")):
-            dims[k] = {"value": sv.get("value"), "strictness": sv.get("strictness", "best-effort")}
+            val = sv.get("value")
+            # 需求侧归一（兜底）：数字槽位值确保为 int（兼容历史/边缘字符串值，如"1000台"）
+            if k in num_keys and not isinstance(val, (int, float)):
+                _parsed = req_schema.normalize_number(val)
+                if _parsed is not None:
+                    val = _parsed
+            dims[k] = {"value": val, "strictness": sv.get("strictness", "best-effort")}
     return {
         "schema_ref": req_schema.schema_ref_of(pt),
         "dimensions": dims,

@@ -7,9 +7,33 @@
 """
 from __future__ import annotations
 
+import re
 from enum import Enum
 
 from app.domains import ontology
+
+
+# 数字槽位归一（需求侧）：把带单位/中文量词/自然语言的数字值归一成 int。
+# 例："1000台"→1000、"不超过30天"→30、"至少5000"→5000、">=3000"→3000、"约1000"→1000、"5000+"→5000
+_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def normalize_number(value) -> int | None:
+    """数字槽位值 → int；无法解析返回 None（调用方决定保留原值或置空）。"""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    s = str(value).strip().replace(",", "").replace("，", "")
+    if not s:
+        return None
+    m = _NUMBER_RE.search(s)
+    if not m:
+        return None
+    try:
+        return int(float(m.group(0)))
+    except (TypeError, ValueError):
+        return None
 
 
 class SlotTriState(str, Enum):

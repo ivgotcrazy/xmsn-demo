@@ -196,7 +196,10 @@ def merge_slot(state: dict, slot_delta: dict, extra: list[dict] | None = None) -
     d_pt = (slot_delta or {}).get("product_type")
     delta_pt = d_pt.get("value") if isinstance(d_pt, dict) else None
     pt = delta_pt or cur_pt  # 同一条消息同时给品类+扩展字段时，按新品类校验合法 key
-    valid_keys = {f["key"] for f in req_schema.fields_for(pt)} | {"product_type"}
+    _fields = req_schema.fields_for(pt)
+    valid_keys = {f["key"] for f in _fields} | {"product_type"}
+    # 需求侧归一：数字槽位（value_type=number）写入前归一成 int（"1000台"→1000、"不超过30天"→30）
+    num_keys = {f["key"] for f in _fields if f.get("value_type") == "number"}
     for key, sv in (slot_delta or {}).items():
         if not isinstance(sv, dict):
             continue
@@ -232,6 +235,11 @@ def merge_slot(state: dict, slot_delta: dict, extra: list[dict] | None = None) -
                 combined = list(val)
             state[key] = {"value": combined, "state": SlotTriState.SET.value, "strictness": strictness}
         else:
+            # 数字槽位归一（需求侧）：带单位/自然语言 → int；无法解析保留原值交由后续处理
+            if key in num_keys and not isinstance(val, (int, float)):
+                _parsed = req_schema.normalize_number(val)
+                if _parsed is not None:
+                    val = _parsed
             state[key] = {"value": val, "state": SlotTriState.SET.value, "strictness": strictness}
     if extra:
         for item in extra:
@@ -596,6 +604,7 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
     classify_reply = ""
     allowed_keys = {f["key"] for f in active} | {"product_type"}
     kinds = {f["key"]: f.get("kind") for f in active}
+    num_keys = {f["key"] for f in active if f.get("value_type") == "number"}
     for tc in raw_tool_calls:
         name = tc["name"]
         args = tc["arguments"] or {}
@@ -629,12 +638,11 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
                     if x not in (None, ""):
                         extra.append({"label": str(x), "value": str(x), "strictness": "best-effort"})
                 continue
-            # 数字字段强转（模型常输出字符串 "5000" → int）
-            if kinds.get(k) == "number" and not isinstance(v, int):
-                try:
-                    v = int(str(v).strip())
-                except Exception:
-                    v = v  # 保持原值，交由 merge/校验处理
+            # 数字字段归一（模型常输出 "5000" / "1000台" / "不超过30天" → int；无法解析保留原值）
+            if k in num_keys and not isinstance(v, (int, float)):
+                _parsed = req_schema.normalize_number(v)
+                if _parsed is not None:
+                    v = _parsed
             mg = merges.get(k)
             slot_delta[k] = {"value": v,
                              "strictness": strictness.get(k, "best-effort") or "best-effort",

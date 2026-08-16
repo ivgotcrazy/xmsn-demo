@@ -1,79 +1,80 @@
 {
   "_meta": {
-    "version": 1,
-    "note": "精选行业知识（curated）：覆盖萃取答疑(SC-17~20)/推荐依据(SC-05)/别名归一(SC-15)/认证合规(FAQ)；每条带 source 供可溯源。category 沿用 dependency/terminology/trap/faq 分类。",
+    "version": 2,
+    "category": "智能音箱",
+    "note": "精选行业知识 v2（2026-08-16）：单一品类「智能音箱」10 条，覆盖萃取答疑(domain_qa)/推荐依据(recommend)/认证合规(faq)/避坑(trap)，对需求萃取引导与规避踩坑有效。industry 统一为 智能音箱。",
     "count": 10
   },
   "knowledge": [
     {
-      "content": "机顶盒电视制式差异：DVB-C 是有线数字电视（同轴电缆），DVB-T 是地面数字电视（天线接收），欧洲与东南亚按市场使用；出货前需确认目标市场的制式与频段。",
-      "category": "terminology",
-      "industry": "机顶盒",
-      "usage": "domain_qa",
-      "source": "行业常识（DVB 标准）"
-    },
-    {
-      "content": "Linux 与 Android 机顶盒取舍：Linux 启动快、资源占用低、适合单一应用与运营商深度定制；Android 应用生态完整、UI 灵活，适合零售与流媒体场景。",
-      "category": "terminology",
-      "industry": "机顶盒",
-      "usage": "domain_qa",
-      "source": "行业常识"
-    },
-    {
-      "content": "机顶盒起订量与交期常见梯度：成熟 ODM 方案一般 1000~3000 台起，新开模/深度定制常需 5000 台以上；交期受 SMT 排期与老化测试影响，通常 20~45 天。",
+      "content": "智能音箱远场拾音对麦克风阵列有要求：4 麦及以上才能稳定覆盖 8 米内语音唤醒与识别；2 麦多用于桌面近场，客厅/全屋场景建议 4~6 麦。",
       "category": "dependency",
-      "industry": "机顶盒",
-      "usage": "recommend",
-      "source": "行业常识（ODM 报价惯例）"
+      "industry": "智能音箱",
+      "usage": "domain_qa",
+      "source": "行业常识（麦克风阵列）"
     },
     {
-      "content": "麦克风阵列形态与拾音：线性 4 麦适合桌面近场，环形 4~6 麦适合客厅 360° 远场拾音；环形阵列对结构设计与波束成形算法要求更高。",
+      "content": "麦克风阵列形态与拾音差异：线性 4 麦适合桌面近场，环形 4~6 麦适合客厅 360° 远场；环形阵列对结构设计与波束成形算法要求更高，模具与调音成本也更高。",
       "category": "terminology",
       "industry": "智能音箱",
       "usage": "domain_qa",
       "source": "行业常识（声学方案）"
     },
     {
-      "content": "智能音箱语音助手上云：自研助手需对接国内 ASR/TTS 平台（如讯飞、百度），接入第三方助手（小爱/天猫精灵）需通过其生态认证，交期与成本更高。",
-      "category": "dependency",
-      "industry": "智能音箱",
-      "usage": "domain_qa",
-      "source": "行业常识"
-    },
-    {
-      "content": "智能音箱整机无线认证三市场并行：出口美国需 FCC（带 WiFi/蓝牙做 FCC ID 模块认证），欧盟 CE-RED，中国 SRRC；三市场通常需分别满足。",
-      "category": "faq",
-      "industry": "智能音箱",
-      "usage": "domain_qa",
-      "source": "行业常识（认证法规）"
-    },
-    {
-      "content": "电池供电 IoT 设备设计要点：低功耗 MCU + 深度休眠 + 定时上报，待机电流需做到 µA 级，电池寿命常按 2~3 年设计；功耗测试是整机验收关键项。",
+      "content": "智能音箱蓝牙与 WiFi 2.4G 频段共存易互相干扰，需注意天线隔离、屏蔽与射频走线设计，避免语音流卡顿；量产前建议做蓝牙吞吐 + WiFi 共存测试。",
       "category": "trap",
-      "industry": "IoT设备",
+      "industry": "智能音箱",
       "usage": "domain_qa",
-      "source": "行业常识（低功耗设计）"
+      "source": "行业常识（射频共存）"
     },
     {
-      "content": "工业物联网组网选型：设备多、数据频次高选 LoRa/4G 汇聚；低功耗传感器选 BLE Mesh；野外与表计场景选运营商覆盖的 NB-IoT；室内穿墙场景蓝牙 Mesh 更稳定。",
-      "category": "dependency",
-      "industry": "IoT设备",
-      "usage": "domain_qa",
-      "source": "行业常识（组网方案）"
-    },
-    {
-      "content": "三种无线认证互不替代：中国 SRRC（工信部无线电型号核准）、欧盟 CE-RED（含射频+EMC）、美国 FCC ID；带无线模组的产品出口三个市场需分别满足，周期与费用独立。",
-      "category": "faq",
-      "industry": "通用",
-      "usage": "domain_qa",
-      "source": "行业常识（认证法规）"
-    },
-    {
-      "content": "代工厂工艺成熟度信号：最小封装尺寸（如 0402）、PCB 层数、三防漆可选、AOI/SPI 检测覆盖、老化测试流程，都是判断 SMT 与整机代工质量水平的关键指标。",
+      "content": "智能音箱喇叭功率与场景：3W/5W 适合桌面与床头，10W 覆盖客厅，户外/商用需 20W 以上并关注声压与失真；功率越高对腔体、散热与功放用料要求越高。",
       "category": "terminology",
-      "industry": "通用",
+      "industry": "智能音箱",
       "usage": "domain_qa",
-      "source": "行业常识（SMT 工艺）"
+      "source": "行业常识（喇叭功率）"
+    },
+    {
+      "content": "智能音箱语音助手上云：自研助手需对接国内 ASR/TTS 平台（如讯飞、百度）；接入第三方助手（小爱、天猫精灵）需通过其生态认证，交期与成本更高。",
+      "category": "dependency",
+      "industry": "智能音箱",
+      "usage": "domain_qa",
+      "source": "行业常识（语音生态）"
+    },
+    {
+      "content": "远场语音唤醒需低功耗 DSP 常驻监听，注意整机待机功耗：家居智能音箱待机建议 ≤2W，有功耗认证/节能要求的市场（如欧盟 ErP）需专项测试。",
+      "category": "trap",
+      "industry": "智能音箱",
+      "usage": "domain_qa",
+      "source": "行业常识（功耗）"
+    },
+    {
+      "content": "智能音箱起订量与交期常见梯度：成熟 ODM 方案一般 1000~3000 台起，新开模/深度定制常需 5000 台以上；交期受 SMT 排期、声学调音与老化测试影响，通常 20~45 天。",
+      "category": "dependency",
+      "industry": "智能音箱",
+      "usage": "recommend",
+      "source": "行业常识（ODM 报价惯例）"
+    },
+    {
+      "content": "出口美国市场的智能音箱必须通过 FCC；带 WiFi/蓝牙无线模块需做 FCC ID 模块认证（SDoC + 模块化认证），出货前务必与工厂确认认证主体与费用归属。",
+      "category": "faq",
+      "industry": "智能音箱",
+      "usage": "faq",
+      "source": "认证合规（FCC）"
+    },
+    {
+      "content": "出口欧盟的智能音箱需 CE 认证：带无线功能须符合 CE-RED（含射频），同时建议提前准备 RoHS 与 REACH；无线共存与 SAR 测试是常见卡点。",
+      "category": "faq",
+      "industry": "智能音箱",
+      "usage": "faq",
+      "source": "认证合规（CE-RED）"
+    },
+    {
+      "content": "出货中国的带蓝牙/WiFi 智能音箱须做 SRRC 无线型号核准；户外/防水智能音箱建议 IP54 起、户外场景 IP65 并做盐雾测试，电池供电需关注电池安全认证（如 UL/IEC）。",
+      "category": "faq",
+      "industry": "智能音箱",
+      "usage": "faq",
+      "source": "认证合规（SRRC/IP/电池）"
     }
   ]
 }

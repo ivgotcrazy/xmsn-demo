@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 匹配详情面板（原型 02B / COMP-024）：Drawer 内——match_score + 四组判定（D10：missing 独立）
- * + match_reason/risk_warning（D4）+ 行内文档引用 + AI 评语 + 查看厂商能力。
+ * + match_reason/risk_warning（D4，风险提示随匹配理由后展示）+ 行内文档引用 + 查看厂商能力。
  */
 import { computed, ref } from "vue"
 import { NButton, NModal, NSpin, NTag } from "naive-ui"
@@ -64,9 +64,6 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
   <div class="match-detail">
     <NSpin :show="loading">
       <template v-if="detail">
-        <div v-if="detail.risk_warning" class="match-detail__alert match-detail__alert--warn">
-          ⚠️ {{ detail.risk_warning }}
-        </div>
         <div class="match-detail__head">
           <h3>{{ detail.company_name }}</h3>
           <span class="match-detail__vendor" @click="emit('viewVendor')">厂商详情</span>
@@ -80,9 +77,9 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
           <p>{{ detail.match_reason }}</p>
         </section>
 
-        <section v-if="detail.ai_comment" class="match-detail__comment">
-          <h4>匹配概要</h4>
-          <p>{{ detail.ai_comment }}</p>
+        <section v-if="detail.risk_warning" class="match-detail__comment match-detail__risk">
+          <h4>风险提示</h4>
+          <p>{{ detail.risk_warning }}</p>
         </section>
 
         <section v-for="g in GROUP" :key="g.key" class="match-detail__group">
@@ -179,6 +176,15 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
 }
 .match-detail__comment {
   margin-bottom: var(--space-24);
+}
+.match-detail__risk {
+  padding: var(--space-10) var(--space-12);
+  border-radius: var(--radius-8);
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+.match-detail__risk h4 {
+  color: var(--color-error-text);
 }
 .match-detail__group h4,
 .match-detail__comment h4 {
