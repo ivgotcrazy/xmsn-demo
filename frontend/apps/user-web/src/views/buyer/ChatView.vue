@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * 02A 需求对话 Agent（原型）：顶部标题栏 + 新建/我的会话，底部输入栏 + "确认并提交匹配"（单端点），
- * 右侧"当前需求"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
+ * 02A 需求对话 Agent（原型）：顶部标题栏 + 新建/我的会话，底部输入栏 + "提交匹配"（单端点），
+ * 右侧"需求档案"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
  */
-import { h, nextTick, onMounted, ref, watch } from "vue"
+import { computed, h, nextTick, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { NButton, NInput, NModal, NPopconfirm, NTag, useMessage } from "naive-ui"
 
@@ -97,6 +97,15 @@ function removeAttachment(name: string): void {
 function hasProductType(): boolean {
   return demandPoints.value.some((p) => p.key === "product_type" && p.value !== "")
 }
+
+/** 提交门槛（D12）：是否已有品类外的需求点（固定维度或扩展需求），用于禁用/隐藏提交入口。 */
+function hasOtherDemandPoints(): boolean {
+  return demandPoints.value.some((p) => p.key !== "product_type")
+}
+
+// 提交确认框（D7 两步化）：品类锚点 / 其余需求点 分组展示
+const anchorPoint = computed<DemandPoint | null>(() => editablePoints.value.find((p) => p.key === "product_type") ?? null)
+const otherPoints = computed<DemandPoint[]>(() => editablePoints.value.filter((p) => p.key !== "product_type"))
 
 /** 时间分组条：组首（首条 / 跨天 / 距上条超 5 分钟）显示，格式 当天 HH:mm / 昨天 HH:mm / MM-DD HH:mm。 */
 const GROUP_GAP_MS = 5 * 60 * 1000
@@ -257,14 +266,9 @@ async function send(text?: string, clickedOption?: string | string[] | null): Pr
 }
 
 function pick(value: string | string[]): void {
-  // "确认并提交匹配" → 两步化确认框（D7）；"继续补充"继续对话；多选提交数组；单选/动作提交单值
-  if (typeof value === "string" && value === "确认并提交匹配") {
+  // "提交匹配" → 两步化确认框（D7）；多选提交数组；单选/动作提交单值
+  if (typeof value === "string" && value === "提交匹配") {
     void openConfirm()
-    return
-  }
-  if (typeof value === "string" && value === "继续补充") {
-    options.value = []
-    void send("继续补充", "继续补充") // 点击=UI 动作 → 后端确定性开放引导
     return
   }
   if (Array.isArray(value)) {
@@ -278,6 +282,11 @@ function displayVal(v: string | string[]): string {
   return Array.isArray(v) ? v.join("、") : v
 }
 
+/** 值 → 标签数组（数组原样；顿号分隔字符串拆开；确认框逐项 chip 展示用）。 */
+function splitValue(v: string | string[]): string[] {
+  return Array.isArray(v) ? v.map(String) : String(v).split("、").map((s) => s.trim()).filter(Boolean)
+}
+
 /** D7 两步化第一步：打开确认框（只读展示需求点 + strictness，可微调） */
 function openConfirm(): void {
   if (!conversationId.value) return
@@ -288,7 +297,7 @@ function openConfirm(): void {
   }
   const others = demandPoints.value.filter((p) => p.key !== "product_type")
   if (others.length === 0) {
-    message.warning("请至少补充 1 个需求点（如操作系统、认证、起订量等）后才能提交匹配")
+    message.warning("请补充需求点（如操作系统、认证、起订量等）后才能提交匹配")
     return
   }
   editablePoints.value = demandPoints.value.map((p) => ({
@@ -482,10 +491,10 @@ onMounted(() => {
           </div>
         </div>
         <aside class="chat-page__aside">
-          <!-- 当前需求 card -->
+          <!-- 需求档案 card -->
           <div class="chat-page__aside-card chat-page__demand" :class="{ 'is-collapsed': asideCollapsed }">
             <div class="chat-page__aside-head">
-              <h3>当前需求</h3>
+              <h3>需求档案</h3>
               <NButton text size="small" @click="asideCollapsed = !asideCollapsed">
                 {{ asideCollapsed ? "展开" : "收起" }}
               </NButton>
@@ -494,7 +503,7 @@ onMounted(() => {
               <DemandProfileCard :points="demandPoints" />
             </div>
             <div v-if="hasProductType() && !asideCollapsed" class="chat-page__demand-footer">
-              <NButton type="primary" block @click="openConfirm()">提交匹配 →</NButton>
+              <NButton type="primary" block :disabled="!hasOtherDemandPoints()" @click="openConfirm()">提交匹配 →</NButton>
             </div>
           </div>
 
@@ -549,22 +558,70 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- D7 两步化：提交确认框（strictness 只读展示、可微调） -->
-    <NModal v-model:show="confirmOpen" preset="card" title="确认提交匹配" style="width: 580px">
-      <div class="chat-confirm__hint">请确认需求点与严格度（必须/尽力可切换），提交后开始匹配。</div>
-      <div v-if="editablePoints.length" class="chat-confirm__list">
-        <div v-for="(p, i) in editablePoints" :key="i" class="chat-confirm__row">
-          <span class="chat-confirm__label">{{ p.label }}</span>
-          <span class="chat-confirm__value">{{ displayVal(p.value) }}</span>
-          <NButton
-            size="tiny"
-            :type="p.strictness === 'strict' ? 'warning' : 'default'"
-            @click="toggleStrictness(p)"
-          >
-            {{ p.strictness === "strict" ? "必须" : "尽力" }}
-          </NButton>
+    <!-- D7 两步化：提交确认框（需求档案清晰分层展示 + strictness 可微调） -->
+    <NModal v-model:show="confirmOpen" preset="card" title="确认提交匹配" style="width: 640px">
+      <p class="chat-confirm__hint">
+        请核对下方需求档案，右侧可切换严格度：<em>必须</em>＝硬性要求、<em>尽力</em>＝倾向项。确认后开始匹配。
+      </p>
+
+      <div v-if="!editablePoints.length" class="chat-confirm__empty">
+        暂无可确认的需求点，请先在对话中补充。
+      </div>
+
+      <div v-else class="chat-confirm__list">
+        <!-- 品类锚点：单独高亮 -->
+        <div v-if="anchorPoint" class="chat-confirm__section">
+          <div class="chat-confirm__section-title">品类锚点</div>
+          <div class="chat-confirm__row chat-confirm__row--anchor">
+            <div class="chat-confirm__label">{{ anchorPoint.label }}</div>
+            <div class="chat-confirm__value">
+              <NTag size="small" round type="primary">{{ displayVal(anchorPoint.value) }}</NTag>
+            </div>
+            <div class="chat-confirm__strict">
+              <NButton
+                size="tiny"
+                round
+                :type="anchorPoint.strictness === 'strict' ? 'warning' : 'default'"
+                @click="toggleStrictness(anchorPoint)"
+              >
+                {{ anchorPoint.strictness === "strict" ? "必须" : "尽力" }}
+              </NButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- 其余需求点 -->
+        <div v-if="otherPoints.length" class="chat-confirm__section">
+          <div class="chat-confirm__section-title">
+            需求点
+            <span class="chat-confirm__count">{{ otherPoints.length }}</span>
+          </div>
+          <div v-for="(p, i) in otherPoints" :key="i" class="chat-confirm__row">
+            <div class="chat-confirm__label">{{ p.label }}</div>
+            <div class="chat-confirm__value">
+              <NTag
+                v-for="(v, vi) in splitValue(p.value)"
+                :key="vi"
+                size="small"
+                class="chat-confirm__tag"
+              >
+                {{ v }}
+              </NTag>
+            </div>
+            <div class="chat-confirm__strict">
+              <NButton
+                size="tiny"
+                round
+                :type="p.strictness === 'strict' ? 'warning' : 'default'"
+                @click="toggleStrictness(p)"
+              >
+                {{ p.strictness === "strict" ? "必须" : "尽力" }}
+              </NButton>
+            </div>
+          </div>
         </div>
       </div>
+
       <template #footer>
         <div class="chat-confirm__actions">
           <NButton @click="confirmOpen = false">取消</NButton>
@@ -832,5 +889,97 @@ onMounted(() => {
   gap: var(--space-8);
   font-size: var(--font-size-12);
   color: var(--color-text-secondary);
+}
+
+/* 提交确认框（D7 两步化）：需求档案分层展示，避免信息挤成一坨 */
+.chat-confirm__hint {
+  margin: 0 0 var(--space-16);
+  font-size: var(--font-size-13);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-secondary);
+}
+.chat-confirm__hint em {
+  font-style: normal;
+  font-weight: var(--font-weight-600);
+  color: var(--color-primary-text);
+}
+.chat-confirm__empty {
+  padding: var(--space-24) var(--space-16);
+  text-align: center;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  border: var(--border-width-1) dashed var(--color-border-strong);
+  border-radius: var(--radius-8);
+}
+.chat-confirm__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.chat-confirm__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-600);
+  color: var(--color-text-secondary);
+}
+.chat-confirm__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-chat-agent-bg);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-500);
+  color: var(--color-text-secondary);
+}
+.chat-confirm__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  border: var(--border-width-1) solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  background: var(--color-bg-panel);
+}
+.chat-confirm__row + .chat-confirm__row {
+  margin-top: var(--space-8);
+}
+/* 品类锚点行：左侧主题色竖条高亮 */
+.chat-confirm__row--anchor {
+  border-color: var(--color-border-strong);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-primary-bg);
+}
+.chat-confirm__label {
+  flex: none;
+  width: 96px;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-600);
+  color: var(--color-text-secondary);
+}
+.chat-confirm__value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  font-size: var(--font-size-13);
+  color: var(--color-text);
+}
+.chat-confirm__strict {
+  flex: none;
+}
+.chat-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
 }
 </style>

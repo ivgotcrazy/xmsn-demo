@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 选项组（v2.1 重设计）：区分三种展示形态——
- * - actions：流程动作按钮（确认并提交匹配 / 继续补充 / 按建议填写 / 我自己定 / 跳过），点选即提交；
+ * - actions：流程动作按钮（提交匹配 / 按建议填写 / 我自己定 / 跳过），点选即提交；
  * - single ：单选槽位（radio 样式），选择后点「确认选择」提交；
  * - multi  ：多选槽位（checkbox 样式），可勾选多项，点「确认选择」提交数组。
  * select 载荷：actions/single → string；multi → string[]。

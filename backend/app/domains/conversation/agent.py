@@ -56,11 +56,11 @@ EXTRACT_PROMPT = """你是需脉AI选型助手的意图解析器。用户正在�
 {message}
 """
 
-# 完成态 confirm / 开放引导文案（统一"确认并提交匹配"标签 + 开放引导）
+# 完成态 confirm / 开放引导文案（统一"提交匹配"标签 + 开放引导）
 # D12：门槛达成（品类 + ≥1 需求点）→ 不再提示"核心需求已明确"（低门槛，语义误导），气泡正文用需求回执，仅显示按钮
-OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「确认并提交匹配」结束。"
+OPEN_GUIDE_TEXT = "好的，您还想补充什么？例如工艺、外观、预算、包装等，直接告诉我；或点「提交匹配」结束。"
 # D11/D12：门槛未达成（仅品类、0 需求点）时的开放引导——不逐维度模板追问，交由 LLM 自然引导
-NEED_POINTS_TEXT = "好的，您已选择品类。请继续补充至少 1 个具体需求点（如操作系统、认证、起订量、交期等），或直接描述您的代工需求。"
+NEED_POINTS_TEXT = "好的，您已选择品类。请继续补充具体需求点（如操作系统、认证、起订量、交期等），或直接描述您的代工需求。"
 
 # v2.1：删除文本命令/正则常量（红线6，不做字符串匹配语义）——
 # _CONTINUATION / CONFIRM_COMMANDS / _REDIRECT_PAT / _OFFTOPIC_PAT / _RESULT_VIEW_PAT / ACCEPT_RECOMMEND_PAT 已移除。
@@ -324,28 +324,28 @@ def decide_question(state: dict) -> tuple[str | None, str, list[str], str]:
     D11：追问交 LLM（agent_reasoning 自然引导，sys_prompt 注入 allowed_set + 已填点）；
     程序兜底只做——
     - 品类未定 → 问品类（唯一必需锚点）；
-    - 门槛达成（D12：品类+≥1 需求点）→ 确认提示/开放引导；
-    - 门槛未达成（仅品类/0 需求点）→ 开放引导提示补充需求点（**不再 next_slot 逐维度模板追问**）。
+    - 门槛达成（D12：品类+≥1 需求点）→ 展示「提交匹配」动作按钮；
+    - 门槛未达成（仅品类/0 需求点）→ 开放引导提示补充需求点，不展示动作按钮（**不再 next_slot 逐维度模板追问**）。
     熔断触发给换方式话术。
     """
-    actions = ["确认并提交匹配", "继续补充"]
+    actions = ["提交匹配"]
     pt = _product_type(state)
-    # 熔断：连续无进展 ≥3 轮 → 换方式/引导人工（SC-37/38/33）
+    # 熔断：连续无进展 ≥3 轮 → 换方式/引导人工（SC-37/38/33，纯引导不给动作按钮）
     if state.get("_stall_counter", 0) >= 3:
-        return None, stall_text(), actions, "actions"
+        return None, stall_text(), [], "none"
     if not pt:
         f = req_schema.FIXED_FIELDS[0]  # product_type
         return "product_type", f"请告诉我您需要找什么类型的代工厂？", list(f.get("options") or []), "single"
     verdict = req_schema.validate_completion(state, pt)
     if verdict["done"]:
-        # D12 门槛达成（品类 + ≥1 需求点）：不加引导句（低门槛勿承诺"需求完整"），仅返回两个动作按钮；
+        # D12 门槛达成（品类 + ≥1 需求点）：不加引导句（低门槛勿承诺"需求完整"），仅返回「提交匹配」动作按钮；
         # 气泡正文由调用方用需求回执（summary/LLM 回执）填充；再次进入完成态 → 开放引导（不重复）
         if state.get("_confirm_prompted"):
             return None, OPEN_GUIDE_TEXT, actions, "actions"
         state["_confirm_prompted"] = True
         return None, "", actions, "actions"
-    # 门槛未达成（仅品类/0 需求点）→ 开放引导（D11：不逐维度模板追问，交由 LLM 自然引导）
-    return None, NEED_POINTS_TEXT, actions, "actions"
+    # 门槛未达成（仅品类/0 需求点）→ 开放引导，不展示动作按钮（D11：不逐维度模板追问，交由 LLM 自然引导）
+    return None, NEED_POINTS_TEXT, [], "none"
 
 
 # ---- 代理详细设计 v2 8/9：推理节点 / 状态修剪 / 引导模板 ----
@@ -393,7 +393,7 @@ SUBMIT_TOOL = {
     "type": "function",
     "function": {
         "name": "submit_request",
-        "description": "仅当用户明确表示要结束需求整理并提交匹配（如「确认并提交匹配」「可以提交了」「帮我提交吧」）时调用；"
+        "description": "仅当用户明确表示要结束需求整理并提交匹配（如「提交匹配」「可以提交了」「帮我提交吧」）时调用；"
                        "程序将生成需求档案快照并触发匹配。若用户只是在确认某个槽位值（如「确认接口要USB」），不要调用。",
         "parameters": {"type": "object", "properties": {}, "required": []},
     },
@@ -500,38 +500,75 @@ async def agent_reasoning(state: dict, message: str, db=None, meta: dict | None 
             logger.warning("rag inject failed (降级): %s", exc)
 
     next_hint = f"{nf['label']}" if nf else "（无，可围绕当前需求自然收尾）"
+    # 系统提示（分区结构化：角色 → 状态 → 工具规则；A0 品类锚定加固，杜绝"正文口头锚定、工具未落槽"）
     sys_prompt = (
+        "# 角色与目标\n"
         "你是需脉AI选型助手，专注 B2B 代工制造需求萃取。\n"
-        "**代工锚定**：用户描述的『产品/设备/硬件』（如智能音箱、语音助手、机顶盒）是**要委托代工制造的整机**，"
-        "先锚定品类（product_type）再按制造需求（OS/接口/认证/产能/交期等）萃取；"
-        "不要把用户当服务/软件购买者，也不要当厂商自我介绍——即便用户未明说『代工/生产/制造』，"
-        "只要是描述要做某产品的需求都按代工处理。\n"
-        f"当前品类：{pt or '未定'}\n"
-        f"本轮建议追问维度：{next_hint}（你可围绕它自然提问；若用户已提供其他合法槽位也可顺带写入）\n"
-        "# 当前可填槽位（allowed_set）\n" + _allowed_lines(active) + "\n"
-        "# 当前已填需求点（正向点 + strictness）\n" + _render_slots(state) + "\n"
-        "# 工具选择规则\n"
-        "A. 用户本轮给出了明确槽位信息（含补充/纠正）→ 调用 update_requirement_slots 写入；可在正文给简短回执。\n"
-        "A1. **多选字段（os/interfaces/certifications 等）**：纠正/重新声明/排除某项 → 输出**最终完整集合**整体替换——"
-        "如「只要Android」→ os=['Android']；「把Linux去掉」且当前 ['Linux','Android'] → os=['Android']。"
-        "补充/追加某项（如「再加RTOS」）→ 可仅给新增项并设 __merge__:{'<key>':'append'}（保留旧值）。"
-        "务必：不遗漏已有值、不添加用户未提到的值。\n"
-        "B. 用户本轮没有槽位信息，而是：\n"
-        "   - 领域知识提问（Linux与Android区别等）→ classify_turn(intent=qa)，正文≤3~5句、可注明「依据：…」、末尾引导回槽位；\n"
-        "   - 询问厂商比较/推荐厂商/查匹配结果 → classify_turn(intent=guide_result)，正文不评价厂商；\n"
-        "   - 闲聊/与需求无关 → classify_turn(intent=guide_back)，正文礼貌拉回；\n"
-        "   - 表示收尾（就这样吧/差不多了）→ classify_turn(intent=weak_close)；\n"
-        "   - 拿不定主意要推荐（你推荐/随便/不知道选什么）→ classify_turn(intent=recommend)，正文说明想推荐的方向。\n"
-        "C. 无论是否调用工具，都要在正文（reply_text 或 content）给出一句简短自然回应，勿用 markdown 标记。\n"
-        "D. 若用户**同时**给出槽位信息和提问/推荐请求（如「放在家庭中使用，你推荐什么工艺？」）→ "
-        "可同时调用 update_requirement_slots（写入槽位，如 application_scenario=家庭）和 classify_turn（回答问题）。\n"
-        "E. 用户明确表示要结束并提交匹配（如「确认并提交匹配」「可以提交了」「帮我提交吧」）→ 调用 submit_request；"
-        "勿与填槽混淆（「确认接口要USB」是确认槽位值，应调 update_requirement_slots）。\n"
-        "F. **一会话一产品（SC-31）**：若「当前品类」已确定，而用户表达了**切换到另一产品类型**的意图"
-        "（如当前机顶盒、改做智能音箱）→ 不要在 update_requirement_slots 里修改 product_type，也不写新品类专属字段；"
-        "正文用引导语提示：检测到您提到「新品类」，当前会话已聚焦「原品类」，如需咨询新品类建议新建会话。\n"
-        + (knowledge or "") + "\n"
-        + ("# 当前用户画像\n" + ((meta or {}).get("user_profile") or "（无）") + "\n")
+        "\n"
+        "## 代工锚定（先想清楚，再决定动作）\n"
+        "- 用户描述的『产品/设备/硬件』（如智能音箱、机顶盒、语音助手）是【要委托代工制造的整机】。\n"
+        "- 流程：先锚定品类 product_type，再按制造维度（OS/接口/认证/产能/交期等）萃取。\n"
+        "- 不要把用户当服务/软件购买者，也不要把用户当作厂商在做自我介绍。\n"
+        "- 即便用户未明说『代工/生产/制造』，只要在描述『要做某产品』的需求，一律按代工处理。\n"
+        "\n"
+        "# 当前会话状态\n"
+        f"- 当前品类：{pt or '未定'}\n"
+        f"- 本轮建议追问维度：{next_hint}（围绕它自然提问；用户已给的其他合法槽位也可顺带写入）\n"
+        "\n"
+        "## 当前可填槽位（allowed_set）\n"
+        f"{_allowed_lines(active)}\n"
+        "\n"
+        "## 当前已填需求点（正向点 + strictness）\n"
+        f"{_render_slots(state)}\n"
+        "\n"
+        "# 工具调用规则\n"
+        "\n"
+        "## A. 填槽 → update_requirement_slots\n"
+        "用户本轮给出明确槽位信息（含补充/纠正/排除）时调用，调用后在正文给简短回执。\n"
+        "\n"
+        "### A0. 品类锚定 product_type —— 最高优先级\n"
+        "- 【必须】用户明确说出/确认了产品类型（如「智能音箱」「做音箱」「机顶盒吧」），"
+        "必须在 update_requirement_slots 中输出 product_type = 该品类，再在正文简短确认。\n"
+        "- 【必须】禁止在未发出 update_requirement_slots 之前，于正文中声称"
+        "『已锚定品类 / 已记录品类 / 已确认产品类型』。\n"
+        "- 【禁止】不要用『我先帮您锚定品类为 X』这类口头承诺代替真正的槽位写入。\n"
+        "- 用户只说了品类词（如「智能音箱」）→ 本轮必须写入 product_type，正文确认后自然追问下一维度。\n"
+        "\n"
+        "### A1. 多选字段（os / interfaces / certifications 等）\n"
+        "- 纠正/重新声明/排除某项 → 输出【最终完整集合】整体替换。\n"
+        "  例：「只要 Android」→ os=['Android']；当前 ['Linux','Android']、去掉 Linux → os=['Android']。\n"
+        "- 补充/追加某项（如「再加 RTOS」）→ 只给新增项并设 __merge__:{'<key>':'append'}（保留旧值）。\n"
+        "- 【必须】不遗漏已有值，不添加用户未提到的值。\n"
+        "\n"
+        "## B. 非填槽轮 → classify_turn\n"
+        "用户本轮没有槽位信息，而是：\n"
+        "- 领域知识提问（如 Linux 与 Android 的区别）→ intent=qa；正文 ≤3~5 句、可注明「依据：…」、末尾引导回槽位；\n"
+        "- 询问厂商比较 / 推荐厂商 / 查匹配结果 → intent=guide_result；正文不评价厂商；\n"
+        "- 闲聊 / 与需求无关 → intent=guide_back；正文礼貌拉回；\n"
+        "- 表示收尾（「就这样吧」「差不多了」）→ intent=weak_close；\n"
+        "- 拿不定主意要推荐（「你推荐」「随便」「不知道选什么」）→ intent=recommend；正文说明想推荐的方向。\n"
+        "\n"
+        "## C. 回复正文\n"
+        "- 【必须】无论是否调用工具，正文（reply_text 或 content）都给出一句简短自然回应，勿用 markdown 标记。\n"
+        "\n"
+        "## D. 混合意图\n"
+        "- 用户同时给出槽位信息 + 提问/推荐请求（如「放在家庭中使用，你推荐什么工艺？」）→ "
+        "可同时调用 update_requirement_slots（写入槽位）+ classify_turn（回答问题）。\n"
+        "\n"
+        "## E. 提交意图 → submit_request\n"
+        "- 用户明确表示要结束并提交匹配（如「提交匹配」「可以提交了」「帮我提交吧」）→ 调用 submit_request。\n"
+        "- 【注意】勿与填槽混淆：「确认接口要 USB」是确认槽位值，应调 update_requirement_slots。\n"
+        "\n"
+        "## F. 一会话一产品（SC-31）\n"
+        "- 若「当前品类」已确定，而用户表达【切换到另一产品类型】的意图（如当前机顶盒、改做智能音箱）→ "
+        "不要在 update_requirement_slots 中修改 product_type，也不写新品类专属字段；"
+        "正文引导：检测到您提到「新品类」，当前会话已聚焦「原品类」，如需咨询新品类建议新建会话。\n"
+        "\n"
+        + (knowledge or "")
+        + "\n"
+        + "# 当前用户画像\n"
+        + ((meta or {}).get("user_profile") or "（无）")
+        + "\n"
     )
     t0 = _time.perf_counter()
     raw_tool_calls: list[dict] = []
@@ -694,9 +731,9 @@ def weak_close_recap(state: dict) -> str:
     for e in state.get("extended", []) or []:
         parts.append(f"{e.get('label') or e.get('value')}：{e.get('value')}")
     if not req_schema.validate_completion(state, pt)["done"]:
-        parts.append("（需补充至少 1 个需求点后方可提交，D12）")
+        parts.append("（需补充需求点后方可提交）")
     summary = "好的，当前需求档案：" + ("；".join(parts) if parts else "（空）")
-    summary += "。确认并提交匹配，还是继续补充？"
+    summary += "。提交匹配，还是继续补充？"
     return summary
 
 

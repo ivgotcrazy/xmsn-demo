@@ -200,9 +200,12 @@ async def _non_extract_message(
         evt, opts, otype = "guard", [], "none"
     elif intent == "weak_close":
         content = agent.weak_close_recap(state)
-        opts = ["确认并提交匹配", "继续补充"]
+        # 提交门槛（D12）：已达门槛（品类 + ≥1 需求点）才亮「提交匹配」，否则不展示动作按钮
+        _pt = (state.get("product_type") or {}).get("value")
+        _done = req_schema.validate_completion(state, _pt)["done"]
+        opts = ["提交匹配"] if _done else []
         state["_pending"] = {"key": None, "options": opts}
-        evt, otype = "recap", "actions"
+        evt, otype = "recap", "actions" if _done else "none"
     elif intent == "recommend":
         profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
         rec = agent.build_recommendation(state, profile_ctx)
@@ -332,7 +335,7 @@ async def _handle_click(
     db: AsyncSession, conv: Conversation, state: dict, history: list,
     turn: int, clicked_option, text: str,
 ) -> MessageResponse:
-    """点击（UI 动作）→ 确定性执行（v2.1 红线6，不做文本匹配）：槽位直写 / 推荐采纳·拒绝·跳过 / 继续补充开放引导。"""
+    """点击（UI 动作）→ 确定性执行（v2.1 红线6，不做文本匹配）：槽位直写 / 推荐采纳·拒绝·跳过 / 提交匹配（前端两步化确认框）。"""
     parsed = {"slot_delta": {}, "extended": []}
     # 1) SC-05 推荐选项（state._recommend 存在时）
     rec = state.get("_recommend")
@@ -367,22 +370,7 @@ async def _handle_click(
     elif not (state.get("product_type") or {}).get("value") and isinstance(clicked_option, str):
         state = agent.write_option(state, "product_type", clicked_option)
         parsed = {"slot_delta": {"product_type": state["product_type"]}, "extended": []}
-    # 3) 继续补充（完成态按钮）→ 开放引导
-    elif clicked_option == "继续补充":
-        state["_pending"] = {"key": None, "options": ["确认并提交匹配", "继续补充"]}
-        content = agent.OPEN_GUIDE_TEXT
-        history.append({"role": "user", "content": text})
-        history.append({"role": "assistant", "content": content, "options": ["确认并提交匹配", "继续补充"],
-                        "options_type": "actions"})
-        conv.current_slots = state
-        conv.conversation_history = history
-        await db.commit()
-        await _append_event(db, str(conv.conversation_id), "guide", {"turn": turn, "content": text[:300]})
-        return MessageResponse(
-            assistant_message=AssistantMessage(content=content, options=["确认并提交匹配", "继续补充"],
-                                               options_type="actions"),
-            demand_points=to_demand_points(state), title=conv.title)
-    # 4) 未知点击（防御）→ 降级为自由文本走 LLM（防静默丢弃）
+    # 3) 未知点击（防御）→ 降级为自由文本走 LLM（防静默丢弃）
     else:
         return await message(db, str(conv.conversation_id), text, None)
 
@@ -424,7 +412,7 @@ async def _do_submit_from_message(
         reply = AssistantMessage(content="请先明确要寻找的产品类型，才能提交匹配。", options=[])
         return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
     if not req_schema.validate_completion(state, (state.get("product_type") or {}).get("value"))["done"]:
-        reply = AssistantMessage(content="还需补充至少 1 个需求点（如操作系统、认证、起订量等）才能提交匹配。", options=[])
+        reply = AssistantMessage(content="还需补充需求点（如操作系统、认证、起订量等）才能提交匹配。", options=[])
         return MessageResponse(assistant_message=reply, demand_points=to_demand_points(state), title=conv.title)
     conv.current_slots = state  # 先持久化合并后的槽位，_do_confirm 快照取当前 state
     try:
@@ -490,7 +478,7 @@ async def _do_confirm(db: AsyncSession, conv: Conversation, demand_points=None) 
             if sv and dp.key != "extended":
                 state[dp.key] = {**sv, "strictness": dp.strictness}
     if not req_schema.validate_completion(state, pt)["done"]:
-        raise err_400("请至少补充 1 个需求点（如操作系统、认证、起订量等）后才能提交匹配")
+        raise err_400("请补充需求点（如操作系统、认证、起订量等）后才能提交匹配")
     warnings: list[str] = []
 
     version = await _next_version(db, conv.conversation_id)
