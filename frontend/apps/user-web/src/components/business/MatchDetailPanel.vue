@@ -79,7 +79,7 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
 
         <section v-if="detail.risk_warning" class="match-detail__comment match-detail__risk">
           <h4>风险提示</h4>
-          <p>{{ detail.risk_warning }}</p>
+          <p class="match-detail__risk-body">{{ detail.risk_warning }}</p>
         </section>
 
         <section v-for="g in GROUP" :key="g.key" class="match-detail__group">
@@ -177,13 +177,15 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
 .match-detail__comment {
   margin-bottom: var(--space-24);
 }
-.match-detail__risk {
-  padding: var(--space-10) var(--space-12);
+/* 风险提示标题：无背景（普通标题样式）；风险正文用警示底色块。
+   选择器需高于 .match-detail__comment p（其编译带 [data-v] 优先级 0,2,1），
+   否则风险正文会被蓝色注释样式覆盖。 */
+.match-detail__risk .match-detail__risk-body {
+  /* 与匹配理由（.match-detail__comment p）一致：统一 12px，无 --space-10 令牌 */
+  padding: var(--space-12);
   border-radius: var(--radius-8);
+  border-left: 3px solid var(--color-error);
   background: var(--color-error-bg);
-  color: var(--color-error-text);
-}
-.match-detail__risk h4 {
   color: var(--color-error-text);
 }
 .match-detail__group h4,

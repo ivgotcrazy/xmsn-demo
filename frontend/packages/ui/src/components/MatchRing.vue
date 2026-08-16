@@ -38,7 +38,7 @@ const levelClass = computed(() =>
         transform="rotate(-90 32 32)"
       />
     </svg>
-    <div class="match-ring__value" :class="levelClass">
+    <div class="match-ring__value" :class="[levelClass, { 'match-ring__value--max': Math.round(score) >= 100 }]">
       <span>{{ Math.round(score) }}</span>
     </div>
   </div>
@@ -70,5 +70,9 @@ const levelClass = computed(() =>
   position: absolute;
   font-size: var(--font-size-18);
   font-weight: var(--font-weight-700);
+}
+/* 100 为三位数，缩小字号避免溢出圆环 */
+.match-ring__value--max {
+  font-size: var(--font-size-14);
 }
 </style>
