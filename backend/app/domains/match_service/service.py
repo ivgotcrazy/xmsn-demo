@@ -1,7 +1,7 @@
 """匹配引擎主流程（T4.3/T4.4）——《匹配详细设计》第 2/6/7/8 章。
 
 compute(request_id)：
-1. 加载 buyer_requests 快照 + match_runs（confirm 已建 running 占位）
+1. 加载 customer_requests 快照 + match_runs（confirm 已建 running 占位）
 2. 幂等：已 done/empty 秒回现有结果（02A 确认弹窗与 02B 加载重复调用不重算）
 3. 通道A：需求向量 ANN（embedding 失败 → 标签检索兜底 hybrid）
 4. 排除项硬过滤（4.5）→ 通道B judge → 综合打分 + 阈值 30 过滤
@@ -17,7 +17,7 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BuyerRequest, MatchResult, MatchRun, Vendor, VendorCapability
+from app.db.models import CustomerRequest, MatchResult, MatchRun, Vendor, VendorCapability
 from app.domains.conversation import schema as req_schema
 from app.domains.match_service import judger, retriever, scorer, stage0
 from app.schemas.common import err_404
@@ -198,7 +198,7 @@ async def compute(db: AsyncSession, request_id: str) -> MatchComputeResponse:
     except ValueError:
         raise err_404("需求档案不存在")
     
-    req = await db.get(BuyerRequest, rid)
+    req = await db.get(CustomerRequest, rid)
     if not req or req.deleted_at is not None:
         raise err_404("需求档案不存在")
     
@@ -358,7 +358,7 @@ async def detail(db: AsyncSession, match_id: str) -> MatchDetailResponse:
     vendor = await db.get(Vendor, mr.vendor_id)
     # 品类扩展字段（如 mic_array）标签依赖 product_type；extra_constraints 特例映射
     product_type = None
-    req = await db.get(BuyerRequest, mr.request_id)
+    req = await db.get(CustomerRequest, mr.request_id)
     if req and (req.structured_demand or {}).get("product_type"):
         pt = req.structured_demand["product_type"]
         product_type = pt.get("value") if isinstance(pt, dict) else pt

@@ -2,7 +2,7 @@
  * user-web 路由（前端设计规范 4 / 产品原型设计）：嵌套布局承载。
  * - 公共：/login /register /vendor/register（无布局，居中卡片）
  * - 厂商：/vendor/* 经 VendorLayout（左侧 240px 侧边导航 COMP-005）
- * - 买家：/buyer/* 经 MainLayout（顶部导航）
+ * - 客户：/customer/* 经 MainLayout（顶部导航）
  * 守卫：requiresAuth 需登录。
  */
 import { createRouter, createWebHistory } from "vue-router"
@@ -10,7 +10,7 @@ import { createRouter, createWebHistory } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
 
 const routes = [
-  { path: "/", redirect: "/buyer/chat" },
+  { path: "/", redirect: "/customer/chat" },
   {
     path: "/register",
     name: "register",
@@ -36,9 +36,9 @@ const routes = [
     meta: { title: "企业信息", public: true },
   },
   {
-    path: "/buyer/register",
-    name: "buyer-register",
-    component: () => import("@/views/public/BuyerRegisterView.vue"),
+    path: "/customer/register",
+    name: "customer-register",
+    component: () => import("@/views/public/CustomerRegisterView.vue"),
     meta: { title: "采购方注册", public: true },
   },
   {
@@ -67,31 +67,31 @@ const routes = [
     ],
   },
   {
-    path: "/buyer",
+    path: "/customer",
     component: () => import("@/components/layout/MainLayout.vue"),
     meta: { requiresAuth: true },
     children: [
       {
         path: "chat",
-        name: "buyer-chat",
-        component: () => import("@/views/buyer/ChatView.vue"),
+        name: "customer-chat",
+        component: () => import("@/views/customer/ChatView.vue"),
         meta: { title: "需求对话" },
       },
       {
         path: "matches/:requestId",
-        name: "buyer-match-result",
-        component: () => import("@/views/buyer/MatchesResultView.vue"),
+        name: "customer-match-result",
+        component: () => import("@/views/customer/MatchesResultView.vue"),
         meta: { title: "匹配结果" },
       },
       {
         path: "vendor/:vendorId",
-        name: "buyer-vendor-capability",
-        component: () => import("@/views/buyer/VendorCapabilityView.vue"),
+        name: "customer-vendor-capability",
+        component: () => import("@/views/customer/VendorCapabilityView.vue"),
         meta: { title: "厂商能力" },
       },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: "/buyer/chat" },
+  { path: "/:pathMatch(.*)*", redirect: "/customer/chat" },
 ]
 
 export const router = createRouter({

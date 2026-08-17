@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 需求匹配（最终菜单 04）：行=需求档案（=一次匹配，1:1 匹配实体）。买家/产品/匹配结果
+ * 需求匹配（最终菜单 04）：行=需求档案（=一次匹配，1:1 匹配实体）。客户/产品/匹配结果
  * （基于 run.status）/版本/时间 + 详情抽屉（匹配实体物化统计 + 厂商列表 + 三组判定）。
  */
 import { computed, h, onMounted, ref } from "vue"
@@ -82,7 +82,7 @@ const filtered = computed(() => {
       const d = r.structured_demand as Record<string, unknown>
       return (
         r.request_id.toLowerCase().includes(k) ||
-        r.buyer_phone?.toLowerCase().includes(k) ||
+        r.customer_phone?.toLowerCase().includes(k) ||
         JSON.stringify(d ?? {}).toLowerCase().includes(k)
       )
     })
@@ -110,10 +110,10 @@ function renderMatchStatus(row: AdminRequestItem) {
 
 const columns: DataTableColumns<AdminRequestItem> = [
   {
-    title: "买家",
-    key: "buyer_phone",
+    title: "客户",
+    key: "customer_phone",
     width: 130,
-    render: (row) => maskPhone(row.buyer_phone),
+    render: (row) => maskPhone(row.customer_phone),
   },
   {
     title: "产品类型",
@@ -174,12 +174,12 @@ async function selectVendor(m: MatchItem): Promise<void> {
 }
 
 function exportCsv(): void {
-  const header = "需求ID,版本,买家,产品类型,需求画像,匹配厂商数,最佳匹配,提交时间"
+  const header = "需求ID,版本,客户,产品类型,需求画像,匹配厂商数,最佳匹配,提交时间"
   const lines = filtered.value.map((r) =>
     [
       r.request_id,
       r.version,
-      r.buyer_phone ?? "",
+      r.customer_phone ?? "",
       (r.structured_demand as Record<string, unknown>)?.product_type ?? "",
       renderDemand(r),
       r.run?.total_vendors ?? 0,
@@ -211,7 +211,7 @@ onMounted(async () => {
 <template>
   <div class="requests-page">
     <div class="requests-page__filters">
-      <NInput v-model:value="keyword" placeholder="搜索需求ID/产品/买家" clearable style="width: 240px" @keyup.enter="() => {}" />
+      <NInput v-model:value="keyword" placeholder="搜索需求ID/产品/客户" clearable style="width: 240px" @keyup.enter="() => {}" />
       <NSelect
         v-model:value="status"
         :options="[
@@ -250,7 +250,7 @@ onMounted(async () => {
       <template v-if="current">
         <h4 class="requests-page__sub">基本信息</h4>
         <div class="requests-page__kv">
-          <div><span>买家</span><b>{{ maskPhone(current.buyer_phone) }}</b></div>
+          <div><span>客户</span><b>{{ maskPhone(current.customer_phone) }}</b></div>
           <div><span>会话ID</span><b>{{ current.conversation_id }}</b></div>
           <div><span>版本</span><b>v{{ current.version }}</b></div>
           <div><span>提交时间</span><b>{{ formatTime(current.created_at) }}</b></div>

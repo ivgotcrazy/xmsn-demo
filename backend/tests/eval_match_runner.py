@@ -1,6 +1,6 @@
 """T4.5 匹配侧评估：对已确认需求快照跑 compute，记录结果 + 稳定性基线（9.3）。
 
-- 覆盖：每条 buyer_requests 的匹配结果（命中/分数/来源）
+- 覆盖：每条 customer_requests 的匹配结果（命中/分数/来源）
 - 稳定性：挑一条 done 快照强制重算 N 次 → best_score 标准差 ≤2 / Top-5 Jaccard ≥90%
 （判定缓存 + 确定性规则保证稳定；报告存 tests/eval_match_report_v1.json）
 """
@@ -12,7 +12,7 @@ sys.path.insert(0, r"D:\code\xmsn-demo\xmsn-demo\backend")
 
 from sqlalchemy import delete, select
 
-from app.db.models import BuyerRequest, MatchResult, MatchRun
+from app.db.models import CustomerRequest, MatchResult, MatchRun
 from app.db.session import SessionLocal
 from app.domains.match_service import service as match_service
 
@@ -29,7 +29,7 @@ def _has_anchor(demand: dict | None) -> bool:
 async def main():
     async with SessionLocal() as db:
         reqs = (await db.execute(
-            select(BuyerRequest).where(BuyerRequest.deleted_at.is_(None))
+            select(CustomerRequest).where(CustomerRequest.deleted_at.is_(None))
         )).scalars().all()
         reqs = [r for r in reqs if _has_anchor(r.structured_demand)]
         print(f"需求快照: {len(reqs)} 条（含品类锚点）")

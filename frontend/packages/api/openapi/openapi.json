@@ -32,7 +32,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "用户注册（厂商/买家）",
+        "summary": "用户注册（厂商/客户）",
         "operationId": "register_api_v1_auth_register_post",
         "requestBody": {
           "content": {
@@ -789,7 +789,7 @@
         "tags": [
           "conversation"
         ],
-        "summary": "买家会话列表",
+        "summary": "客户会话列表",
         "operationId": "list_conversations_api_v1_conversations_get",
         "responses": {
           "200": {
@@ -1126,13 +1126,13 @@
         }
       }
     },
-    "/api/v1/admin/buyers": {
+    "/api/v1/admin/customers": {
       "get": {
         "tags": [
           "admin"
         ],
-        "summary": "买家列表（搜索/状态筛选，分页）",
-        "operationId": "list_buyers_api_v1_admin_buyers_get",
+        "summary": "客户列表（搜索/状态筛选，分页）",
+        "operationId": "list_customers_api_v1_admin_customers_get",
         "security": [
           {
             "HTTPBearer": []
@@ -1205,7 +1205,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_BuyerListResponse_"
+                  "$ref": "#/components/schemas/ApiResponse_CustomerListResponse_"
                 }
               }
             }
@@ -1511,6 +1511,51 @@
           }
         }
       }
+    },
+    "/api/v1/documents/{doc_id}/file": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "源文件直读（原样返回，浏览器内嵌预览/下载，非文本提取）",
+        "operationId": "download_doc_api_v1_documents__doc_id__file_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1625,9 +1670,9 @@
             "type": "object",
             "title": "Structured Demand"
           },
-          "buyer_phone": {
+          "customer_phone": {
             "type": "string",
-            "title": "Buyer Phone",
+            "title": "Customer Phone",
             "default": ""
           },
           "run": {
@@ -1846,32 +1891,6 @@
         "type": "object",
         "title": "ApiResponse[AuthToken]"
       },
-      "ApiResponse_BuyerListResponse_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "ok"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/BuyerListResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "ApiResponse[BuyerListResponse]"
-      },
       "ApiResponse_CapabilityOut_": {
         "properties": {
           "code": {
@@ -2001,6 +2020,32 @@
         },
         "type": "object",
         "title": "ApiResponse[ConversationStartResponse]"
+      },
+      "ApiResponse_CustomerListResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerListResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[CustomerListResponse]"
       },
       "ApiResponse_DeleteResponse_": {
         "properties": {
@@ -2524,104 +2569,6 @@
         ],
         "title": "Body_upload_capability_api_v1_vendor_capability_upload_post"
       },
-      "BuyerItem": {
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "title": "User Id"
-          },
-          "phone": {
-            "type": "string",
-            "title": "Phone"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "active",
-              "disabled"
-            ],
-            "title": "Status",
-            "default": "active"
-          },
-          "conversation_count": {
-            "type": "integer",
-            "title": "Conversation Count",
-            "default": 0
-          },
-          "request_count": {
-            "type": "integer",
-            "title": "Request Count",
-            "default": 0
-          },
-          "last_active_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Active At"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "user_id",
-          "phone",
-          "created_at"
-        ],
-        "title": "BuyerItem",
-        "description": "买家列表项（users 表 role='buyer' + 关联统计，一次性返回避免逐行联查）。"
-      },
-      "BuyerListResponse": {
-        "properties": {
-          "list": {
-            "items": {
-              "$ref": "#/components/schemas/BuyerItem"
-            },
-            "type": "array",
-            "title": "List"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "page": {
-            "type": "integer",
-            "title": "Page"
-          },
-          "page_size": {
-            "type": "integer",
-            "title": "Page Size"
-          }
-        },
-        "type": "object",
-        "required": [
-          "list",
-          "total",
-          "page",
-          "page_size"
-        ],
-        "title": "BuyerListResponse"
-      },
       "CapabilityOut": {
         "properties": {
           "capability_id": {
@@ -3011,6 +2958,104 @@
           "first_message"
         ],
         "title": "ConversationStartResponse"
+      },
+      "CustomerItem": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "conversation_count": {
+            "type": "integer",
+            "title": "Conversation Count",
+            "default": 0
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count",
+            "default": 0
+          },
+          "last_active_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "phone",
+          "created_at"
+        ],
+        "title": "CustomerItem",
+        "description": "客户列表项（users 表 role='customer' + 关联统计，一次性返回避免逐行联查）。"
+      },
+      "CustomerListResponse": {
+        "properties": {
+          "list": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerItem"
+            },
+            "type": "array",
+            "title": "List"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "list",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "CustomerListResponse"
       },
       "DeleteResponse": {
         "properties": {
@@ -3805,10 +3850,10 @@
             "type": "string",
             "enum": [
               "vendor",
-              "buyer"
+              "customer"
             ],
             "title": "Role",
-            "default": "buyer"
+            "default": "customer"
           },
           "verify_code": {
             "anyOf": [
@@ -3828,7 +3873,7 @@
           "password"
         ],
         "title": "RegisterRequest",
-        "description": "自助注册：手机号/邮箱 + 密码 + 角色 + 验证码（厂商/买家）。"
+        "description": "自助注册：手机号/邮箱 + 密码 + 角色 + 验证码（厂商/客户）。"
       },
       "RequestSnapshot": {
         "properties": {

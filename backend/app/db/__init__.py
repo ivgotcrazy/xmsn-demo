@@ -1,1 +1,1 @@
-"""数据库：SQLAlchemy models（6.1）+ session + alembic 迁移。T1.4 填充。"""
+"""数据库：SQLAlchemy models（6.1）+ session；开发阶段建表走 create_all（docker-entrypoint.sh）。"""

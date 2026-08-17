@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const start = await fetch("http://localhost/api/v1/conversation/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: "u-buyer-001" }),
+    body: JSON.stringify({ user_id: "u-customer-001" }),
   })
   const startJson = await start.json()
   console.log("start:", start.status, "first_message=", startJson.data?.first_message?.content?.slice(0, 12))

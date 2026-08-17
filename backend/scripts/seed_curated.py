@@ -4,7 +4,7 @@
 - 自测用 seed_data.py（100 家模板厂商）；本脚本 = 演示用精选数据（curated-only，体验更佳）。
 - 单一品类：智能音箱 10 家（虚构公司名 + 真实行业参数），覆盖 matched / partial / missing / niche。
 - 每家 1 份真实 PDF 能力文档（scripts/data/curated_capabilities/），走真实解析管线。
-- 账号：1 买家 + 1 管理员 + 10 厂家（每家可登录厂商端看自己的档案）。
+- 账号：1 客户 + 1 管理员 + 10 厂家（每家可登录厂商端看自己的档案）。
 - 知识：10 条智能音箱行业知识（答疑 / 推荐 / 认证避坑）。
 
 导入（方案A，等价"后台手动导入"的自动化）：
@@ -56,10 +56,10 @@ from app.worker import _parse_capability  # noqa: E402
 DATA = Path(__file__).resolve().parent / "data"
 CAP_DIR = DATA / "curated_capabilities"
 
-# 演示账号：1 买家 + 1 管理员（厂家账号按 curated_vendors.json 每家 1 个）
+# 演示账号：1 客户 + 1 管理员（厂家账号按 curated_vendors.json 每家 1 个）
 DEMO_ACCOUNTS = [
     # (phone, password, role, email)
-    ("13912345678", "buyer123", "buyer", "buyer@xmsn.demo"),
+    ("13912345678", "customer123", "customer", "customer@xmsn.demo"),
     ("13800000000", "123456", "admin", "admin@xmsn.demo"),
 ]
 
@@ -70,7 +70,7 @@ _VERIFY_KEYS = [
 ]
 # 重置时清理的表（外键安全顺序）
 _RESET_TABLES = [
-    "match_results", "match_runs", "buyer_requests", "conversation_events",
+    "match_results", "match_runs", "customer_requests", "conversation_events",
     "conversations", "llm_call_logs", "admin_logs", "user_profiles",
     "profile_schemas", "vendor_capabilities", "vendors", "knowledge_items", "users",
 ]
@@ -224,7 +224,7 @@ async def seed(reset: bool = False) -> None:
         print("=== 精选演示数据（智能音箱 · curated v2）===")
         if reset:
             await _reset_demo(db)
-        # 1) 账号：买家 + 管理员
+        # 1) 账号：客户 + 管理员
         for phone, pwd, role, email in DEMO_ACCOUNTS:
             await _upsert_user(db, phone, pwd, role, email)
         await db.commit()
@@ -243,11 +243,11 @@ async def _summary(db) -> None:
     nv = len((await db.execute(select(Vendor))).scalars().all())
     nc = len((await db.execute(select(VendorCapability))).scalars().all())
     nk = len((await db.execute(select(KnowledgeItem))).scalars().all())
-    nb = len((await db.execute(select(User).where(User.role == "buyer"))).scalars().all())
+    nb = len((await db.execute(select(User).where(User.role == "customer"))).scalars().all())
     na = len((await db.execute(select(User).where(User.role == "admin"))).scalars().all())
     nf = len((await db.execute(select(User).where(User.role == "vendor"))).scalars().all())
-    print(f"  厂商 {nv}（能力档案 {nc}）｜知识 {nk}｜账号 buyer {nb} / admin {na} / factory {nf}")
-    print("  登录：买家 13912345678/buyer123 ｜ 管理员 13800000000/123456 ｜ 厂家 13800000001~10/vendor123")
+    print(f"  厂商 {nv}（能力档案 {nc}）｜知识 {nk}｜账号 customer {nb} / admin {na} / factory {nf}")
+    print("  登录：客户 13912345678/customer123 ｜ 管理员 13800000000/123456 ｜ 厂家 13800000001~10/vendor123")
 
 
 def main() -> None:

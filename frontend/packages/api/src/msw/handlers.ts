@@ -104,8 +104,8 @@ export const handlers = [
     const data = await resolveMock("GET /api/v1/admin/requests", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
-  http.get("*/api/v1/admin/buyers", async ({ request }) => {
-    const data = await resolveMock("GET /api/v1/admin/buyers", request)
+  http.get("*/api/v1/admin/customers", async ({ request }) => {
+    const data = await resolveMock("GET /api/v1/admin/customers", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
   http.get("*/api/v1/admin/logs", async ({ request }) => {
@@ -126,6 +126,10 @@ export const handlers = [
   }),
   http.get("*/api/v1/documents/:doc_id/preview", async ({ request }) => {
     const data = await resolveMock("GET /api/v1/documents/{doc_id}/preview", request)
+    return HttpResponse.json({ code: 0, message: "ok", data })
+  }),
+  http.get("*/api/v1/documents/:doc_id/file", async ({ request }) => {
+    const data = await resolveMock("GET /api/v1/documents/{doc_id}/file", request)
     return HttpResponse.json({ code: 0, message: "ok", data })
   }),
   http.get("*/healthz", () => HttpResponse.json({ code: 0, message: "ok", data: { status: "ok" } }))

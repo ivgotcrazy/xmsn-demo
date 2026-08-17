@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BuyerRequest, Conversation, ProfileSchema, UserProfile
+from app.db.models import Conversation, CustomerRequest, ProfileSchema, UserProfile
 from app.llm.client import chat
 
 logger = logging.getLogger("xmsn.profile")
@@ -28,7 +28,7 @@ CONF_THRESHOLD = 0.6
 # 画像 Schema v1（画像设计 3.4 Dimension 契约）
 PROFILE_SCHEMA_V1 = {
     "schema_version": 1,
-    "name": "buyer_profile_v1",
+    "name": "customer_profile_v1",
     "scope": "base",
     "industry": None,
     "dimensions": [
@@ -235,7 +235,7 @@ async def _run_async_profile_update(request_id: str, conversation_id: str) -> No
     from app.db.session import SessionLocal
     try:
         async with SessionLocal() as db:
-            req = await db.get(BuyerRequest, uuid.UUID(request_id))
+            req = await db.get(CustomerRequest, uuid.UUID(request_id))
             conv = await db.get(Conversation, uuid.UUID(conversation_id))
             if not req or not conv:
                 return

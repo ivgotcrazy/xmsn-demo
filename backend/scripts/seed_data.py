@@ -83,7 +83,7 @@ KNOWLEDGE = [
 
 DEMO_USERS = [
     # (phone, password, role, email)
-    ("13912345678", "buyer123", "buyer", "buyer@xmsn.demo"),
+    ("13912345678", "customer123", "customer", "customer@xmsn.demo"),
     ("13800000000", "123456", "admin", "admin@xmsn.demo"),
     ("18812345678", "vendor123", "vendor", "vendor@xmsn.demo"),
 ]

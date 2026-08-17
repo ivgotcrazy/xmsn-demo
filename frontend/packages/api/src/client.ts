@@ -1,7 +1,7 @@
 /* 生成物（只读勿手改）—— 由 scripts/generate.ts 从 openapi.json 契约快照生成 */
 /* API 客户端：统一经 http.request 封装（JWT 注入 + 统一响应 {code,message,data} 解包） */
 import { request } from "./http"
-import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, DeleteResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, BuyerListResponse, AdminLogListResponse, KnowledgeListResponse, KnowledgeCreateRequest, KnowledgeItemOut, KnowledgeDeleteResponse, DocumentPreviewResponse } from "./types"
+import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, DeleteResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, CustomerListResponse, AdminLogListResponse, KnowledgeListResponse, KnowledgeCreateRequest, KnowledgeItemOut, KnowledgeDeleteResponse, DocumentPreviewResponse } from "./types"
 
 export async function healthz(): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>("/healthz", { method: "GET" })
@@ -103,8 +103,8 @@ export async function adminRequests(page?: number, pageSize?: number): Promise<A
   return request<AdminRequestListResponse>("/api/v1/admin/requests", { method: "GET", query: { page, pageSize } })
 }
 
-export async function adminBuyers(keyword?: (string | null), status?: (string | null), page?: number, pageSize?: number): Promise<BuyerListResponse> {
-  return request<BuyerListResponse>("/api/v1/admin/buyers", { method: "GET", query: { keyword, status, page, pageSize } })
+export async function adminCustomers(keyword?: (string | null), status?: (string | null), page?: number, pageSize?: number): Promise<CustomerListResponse> {
+  return request<CustomerListResponse>("/api/v1/admin/customers", { method: "GET", query: { keyword, status, page, pageSize } })
 }
 
 export async function adminLogs(action?: (string | null), page?: number, pageSize?: number): Promise<AdminLogListResponse> {

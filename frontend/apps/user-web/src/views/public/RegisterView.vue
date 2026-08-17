@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 00A 注册页（选择角色，原型明确化 §1）：纯角色选择页（COMP-003）。
- * 「我是厂商」→ 01A 厂商注册；「我是采购方」→ 买家注册。
+ * 「我是厂商」→ 01A 厂商注册；「我是采购方」→ 客户注册。
  */
 import { useRouter } from "vue-router"
 import { NButton } from "naive-ui"
@@ -18,7 +18,7 @@ const router = useRouter()
         <NButton type="primary" block size="large" @click="router.push('/vendor/register')">
           我是厂商
         </NButton>
-        <NButton block size="large" @click="router.push('/buyer/register')">
+        <NButton block size="large" @click="router.push('/customer/register')">
           我是采购方
         </NButton>
       </div>

@@ -14,10 +14,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 应用代码 + Alembic 迁移 + 运维脚本 + 入口脚本
+# 应用代码 + 运维脚本 + 入口脚本（开发阶段建表走 create_all，见 docker-entrypoint.sh）
 COPY app ./app
-COPY alembic ./alembic
-COPY alembic.ini .
 COPY scripts ./scripts
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

@@ -1,6 +1,6 @@
 """数据模型（对齐系统架构设计 6.1 + 用户画像设计 3 + 代理详细设计 3.5 事实数据）。
 
-包含：users / vendors / vendor_capabilities / conversations / buyer_requests /
+包含：users / vendors / vendor_capabilities / conversations / customer_requests /
 user_profiles / profile_schemas / match_results / knowledge_items / admin_logs /
 llm_call_logs / conversation_events
 """
@@ -34,7 +34,7 @@ def _uuid() -> uuid.UUID:
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint("role IN ('vendor','buyer','admin')", name="ck_users_role"),
+        CheckConstraint("role IN ('vendor','customer','admin')", name="ck_users_role"),
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     # 手机号/邮箱至少其一（支持纯邮箱注册）
@@ -112,8 +112,8 @@ class Conversation(Base):
     )
 
 
-class BuyerRequest(Base):
-    __tablename__ = "buyer_requests"
+class CustomerRequest(Base):
+    __tablename__ = "customer_requests"
     request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.conversation_id")
@@ -176,7 +176,7 @@ class MatchRun(Base):
     )
     run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     request_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("buyer_requests.request_id")
+        UUID(as_uuid=True), ForeignKey("customer_requests.request_id")
     )
     status: Mapped[str] = mapped_column(String(20), default="done")
     total_vendors: Mapped[int] = mapped_column(Integer, default=0)
@@ -196,7 +196,7 @@ class MatchResult(Base):
     run_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("match_runs.run_id"), nullable=False
     )
-    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("buyer_requests.request_id"))
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customer_requests.request_id"))
     vendor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vendors.vendor_id"))
     match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     semantic_score: Mapped[float | None] = mapped_column(Float, nullable=True)

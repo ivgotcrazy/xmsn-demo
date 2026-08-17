@@ -20,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 Db = Annotated[AsyncSession, Depends(get_session)]
 
 
-@router.post("/register", response_model=ApiResponse[AuthToken], summary="用户注册（厂商/买家）")
+@router.post("/register", response_model=ApiResponse[AuthToken], summary="用户注册（厂商/客户）")
 async def register(payload: RegisterRequest, db: Db) -> ApiResponse[AuthToken]:
     return ApiResponse(data=await auth_service.register(db, payload))
 

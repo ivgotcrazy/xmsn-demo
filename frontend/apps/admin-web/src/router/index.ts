@@ -32,10 +32,10 @@ const routes = [
     meta: { title: "厂商产品查看", requiresAuth: true, requiresAdmin: true },
   },
   {
-    path: "/admin/buyers",
-    name: "admin-buyers",
-    component: () => import("@/views/admin/BuyersView.vue"),
-    meta: { title: "买家管理", requiresAuth: true, requiresAdmin: true },
+    path: "/admin/customers",
+    name: "admin-customers",
+    component: () => import("@/views/admin/CustomersView.vue"),
+    meta: { title: "客户管理", requiresAuth: true, requiresAdmin: true },
   },
   {
     path: "/admin/logs",

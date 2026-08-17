@@ -51,7 +51,7 @@ class AdminRequestItem(BaseModel):
     conversation_id: str
     version: int
     structured_demand: dict = Field(default_factory=dict)
-    buyer_phone: str = ""
+    customer_phone: str = ""
     run: MatchRun | None = None
     created_at: datetime
 
@@ -60,8 +60,8 @@ class AdminRequestListResponse(PageData[AdminRequestItem]):
     pass
 
 
-class BuyerItem(BaseModel):
-    """买家列表项（users 表 role='buyer' + 关联统计，一次性返回避免逐行联查）。"""
+class CustomerItem(BaseModel):
+    """客户列表项（users 表 role='customer' + 关联统计，一次性返回避免逐行联查）。"""
 
     user_id: str
     phone: str
@@ -73,7 +73,7 @@ class BuyerItem(BaseModel):
     created_at: datetime
 
 
-class BuyerListResponse(PageData[BuyerItem]):
+class CustomerListResponse(PageData[CustomerItem]):
     pass
 
 

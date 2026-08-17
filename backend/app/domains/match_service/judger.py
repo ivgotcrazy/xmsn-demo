@@ -23,7 +23,7 @@ MISSING = "missing"
 UNMATCHED = "unmatched"
 _VALID = {MATCHED, PARTIAL, MISSING, UNMATCHED}
 
-_SEMANTIC_PROMPT = """给定买家需求 {demand_json} 与厂商能力 {capability_json}，
+_SEMANTIC_PROMPT = """给定客户需求 {demand_json} 与厂商能力 {capability_json}，
 对以下语义需求点逐项判定 verdict（matched/partial/missing/unmatched）：
 {params}
 strict 只输出 JSON：{{"params": [{{"param": "...", "verdict": "...", "note": "..."}}]}}

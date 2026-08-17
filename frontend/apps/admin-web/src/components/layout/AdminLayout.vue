@@ -24,7 +24,7 @@ const renderIcon = (icon: unknown) => () => h(icon as never)
 
 const menus = [
   { key: "/admin/dashboard", label: "数据概览", icon: renderIcon(PieChartOutline) },
-  { key: "/admin/buyers", label: "买家管理", icon: renderIcon(PeopleOutline) },
+  { key: "/admin/customers", label: "客户管理", icon: renderIcon(PeopleOutline) },
   { key: "/admin/vendors", label: "厂商管理", icon: renderIcon(BusinessOutline) },
   { key: "/admin/requests", label: "需求匹配", icon: renderIcon(GitCompareOutline) },
   { key: "/admin/logs", label: "事件日志", icon: renderIcon(DocumentTextOutline) },

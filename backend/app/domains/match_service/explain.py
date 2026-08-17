@@ -17,9 +17,9 @@ logger = logging.getLogger("xmsn.match")
 
 _VALID = {"matched", "partial", "missing", "unmatched"}
 
-EXPLAIN_PROMPT = """你是一个供需匹配分析专家。给定买家的需求和一个厂商的能力，分析匹配情况并生成解释。
+EXPLAIN_PROMPT = """你是一个供需匹配分析专家。给定客户的需求和一个厂商的能力，分析匹配情况并生成解释。
 
-# 买家需求
+# 客户需求
 {demand_json}
 
 # 厂商能力

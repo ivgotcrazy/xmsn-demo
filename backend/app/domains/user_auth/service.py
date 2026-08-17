@@ -65,7 +65,7 @@ def _check_code(account: str, code: str | None) -> None:
 
 
 async def register(db: AsyncSession, payload: RegisterRequest) -> AuthToken:
-    """自助注册（厂商/买家）：手机号或邮箱至少其一；密码 bcrypt 哈希。"""
+    """自助注册（厂商/客户）：手机号或邮箱至少其一；密码 bcrypt 哈希。"""
     if not payload.phone and not payload.email:
         raise err_400("手机号或邮箱至少填写其一")
     if await _find_user(db, payload.phone, payload.email):

@@ -54,8 +54,22 @@ else:
     raise SystemExit("Milvus 长时间未就绪")
 PY
 
-echo "[xmsn] 应用数据库迁移 (alembic upgrade head) ..."
-alembic upgrade head
+echo "[xmsn] 初始化数据库表结构 (create_all) ..."
+python - <<'PY'
+import asyncio
+
+from app.db.base import Base
+from app.db.session import engine
+import app.db.models  # noqa: F401  # 注册全部模型到 Base.metadata
+
+
+async def init_db() -> None:
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+asyncio.run(init_db())
+PY
 
 echo "[xmsn] 启动 uvicorn: $@"
 exec "$@"

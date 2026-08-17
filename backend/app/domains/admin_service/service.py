@@ -20,8 +20,8 @@ from app.schemas.admin import (
     AdminRequestListResponse,
     AdminStatsResponse,
     AuditResponse,
-    BuyerItem,
-    BuyerListResponse,
+    CustomerItem,
+    CustomerListResponse,
     KnowledgeDeleteResponse,
     KnowledgeItemOut,
     KnowledgeListResponse,
@@ -90,7 +90,7 @@ async def list_vendors(db: AsyncSession, audit_status: str | None, page: int, pa
     return VendorListResponse(list=items, total=total, page=page, page_size=page_size)
 
 
-# ---------- M6：数据概览 / 需求查看 / 买家列表 / 审计日志 ----------
+# ---------- M6：数据概览 / 需求查看 / 客户列表 / 审计日志 ----------
 
 _ACTION_LABEL = {
     "login": "管理员登录",
@@ -105,12 +105,12 @@ _ACTION_LABEL = {
 
 async def stats(db: AsyncSession) -> AdminStatsResponse:
     """数据概览（03B 四个统计卡片）。"""
-    from app.db.models import BuyerRequest, MatchRun, User
+    from app.db.models import CustomerRequest, MatchRun, User
 
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar_one()
     total_vendors = (await db.execute(select(func.count()).select_from(Vendor))).scalar_one()
     total_requests = (
-        await db.execute(select(func.count()).select_from(BuyerRequest).where(BuyerRequest.deleted_at.is_(None)))
+        await db.execute(select(func.count()).select_from(CustomerRequest).where(CustomerRequest.deleted_at.is_(None)))
     ).scalar_one()
     total_matches = (await db.execute(select(func.count()).select_from(MatchRun))).scalar_one()
     return AdminStatsResponse(total_users=total_users, total_vendors=total_vendors,
@@ -119,17 +119,17 @@ async def stats(db: AsyncSession) -> AdminStatsResponse:
 
 async def list_requests(db: AsyncSession, page: int, page_size: int) -> AdminRequestListResponse:
     """需求与匹配查看（03C）：行=需求档案，内嵌匹配实体（含物化统计）。"""
-    from app.db.models import BuyerRequest, MatchRun, User
+    from app.db.models import CustomerRequest, MatchRun, User
 
     total = (
-        await db.execute(select(func.count()).select_from(BuyerRequest).where(BuyerRequest.deleted_at.is_(None)))
+        await db.execute(select(func.count()).select_from(CustomerRequest).where(CustomerRequest.deleted_at.is_(None)))
     ).scalar_one()
     reqs = list((await db.execute(
-        select(BuyerRequest).where(BuyerRequest.deleted_at.is_(None))
-        .order_by(BuyerRequest.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        select(CustomerRequest).where(CustomerRequest.deleted_at.is_(None))
+        .order_by(CustomerRequest.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
 
-    # 买家手机号 + 匹配实体（一次性联查）
+    # 客户手机号 + 匹配实体（一次性联查）
     uids = {r.user_id for r in reqs}
     phones: dict = {}
     if uids:
@@ -149,7 +149,7 @@ async def list_requests(db: AsyncSession, page: int, page_size: int) -> AdminReq
             conversation_id=str(r.conversation_id),
             version=r.version,
             structured_demand=r.structured_demand or {},
-            buyer_phone=phones.get(str(r.user_id), ""),
+            customer_phone=phones.get(str(r.user_id), ""),
             run=(MatchRunSchema(
                 run_id=str(run.run_id), request_id=str(run.request_id), status=run.status,
                 total_vendors=run.total_vendors, best_score=run.best_score,
@@ -162,12 +162,12 @@ async def list_requests(db: AsyncSession, page: int, page_size: int) -> AdminReq
     return AdminRequestListResponse(list=items, total=total, page=page, page_size=page_size)
 
 
-async def list_buyers(db: AsyncSession, keyword: str | None, status: str | None,
-                      page: int, page_size: int) -> BuyerListResponse:
-    """买家列表（role='buyer' + 会话/需求统计，一次性聚合避免逐行联查）。"""
-    from app.db.models import BuyerRequest, Conversation, User
+async def list_customers(db: AsyncSession, keyword: str | None, status: str | None,
+                         page: int, page_size: int) -> CustomerListResponse:
+    """客户列表（role='customer' + 会话/需求统计，一次性聚合避免逐行联查）。"""
+    from app.db.models import Conversation, CustomerRequest, User
 
-    filters = [User.role == "buyer"]
+    filters = [User.role == "customer"]
     if keyword:
         kw = f"%{keyword}%"
         filters.append(User.phone.ilike(kw) | (User.email.ilike(kw) if User.email else False))
@@ -187,12 +187,12 @@ async def list_buyers(db: AsyncSession, keyword: str | None, status: str | None,
         cc = await db.execute(select(Conversation.user_id, func.count()).where(
             Conversation.user_id.in_(uids), Conversation.deleted_at.is_(None)).group_by(Conversation.user_id))
         conv_counts = {str(u): n for u, n in cc.all()}
-        rc = await db.execute(select(BuyerRequest.user_id, func.count()).where(
-            BuyerRequest.user_id.in_(uids), BuyerRequest.deleted_at.is_(None)).group_by(BuyerRequest.user_id))
+        rc = await db.execute(select(CustomerRequest.user_id, func.count()).where(
+            CustomerRequest.user_id.in_(uids), CustomerRequest.deleted_at.is_(None)).group_by(CustomerRequest.user_id))
         req_counts = {str(u): n for u, n in rc.all()}
 
     items = [
-        BuyerItem(
+        CustomerItem(
             user_id=str(u.user_id), phone=u.phone or "", email=getattr(u, "email", None),
             status="disabled" if u.status == "disabled" else "active",
             conversation_count=conv_counts.get(str(u.user_id), 0),
@@ -202,7 +202,7 @@ async def list_buyers(db: AsyncSession, keyword: str | None, status: str | None,
         )
         for u in users
     ]
-    return BuyerListResponse(list=items, total=total, page=page, page_size=page_size)
+    return CustomerListResponse(list=items, total=total, page=page, page_size=page_size)
 
 
 async def list_logs(db: AsyncSession, action: str | None, page: int, page_size: int) -> AdminLogListResponse:

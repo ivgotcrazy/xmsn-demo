@@ -27,7 +27,7 @@ async def get_current_user(
         payload = decode_token(creds.credentials)
     except ValueError:
         raise err_401("无效或过期 Token")
-    return UserContext(user_id=payload.get("sub", ""), role=payload.get("role", "buyer"))
+    return UserContext(user_id=payload.get("sub", ""), role=payload.get("role", "customer"))
 
 
 async def require_admin(user: Annotated[UserContext, Depends(get_current_user)]) -> UserContext:

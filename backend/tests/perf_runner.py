@@ -16,7 +16,7 @@ async def main():
     report = {}
     async with httpx.AsyncClient(base_url=BASE, timeout=180) as c:
         t = time.perf_counter()
-        r = await c.post("/api/v1/auth/login", json={"phone": "13912345678", "password": "buyer123"})
+        r = await c.post("/api/v1/auth/login", json={"phone": "13912345678", "password": "customer123"})
         report["login_ms"] = int((time.perf_counter() - t) * 1000)
         h = {"Authorization": f"Bearer {r.json()['data']['access_token']}"}
 

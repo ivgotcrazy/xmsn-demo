@@ -51,7 +51,7 @@ async def confirm(
 
 
 # ---- 历史（6.3.5）----
-@list_router.get("", response_model=ApiResponse[ConversationListResponse], summary="买家会话列表")
+@list_router.get("", response_model=ApiResponse[ConversationListResponse], summary="客户会话列表")
 async def list_conversations(user: CurrentUser, db: AsyncSession = Depends(get_session)) -> ApiResponse[ConversationListResponse]:
     return ApiResponse(data=await conv_service.list_conversations(db, user.user_id))
 

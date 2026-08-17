@@ -13,7 +13,7 @@ from app.schemas.admin import (
     AdminStatsResponse,
     AuditRequest,
     AuditResponse,
-    BuyerListResponse,
+    CustomerListResponse,
     KnowledgeCreateRequest,
     KnowledgeDeleteResponse,
     KnowledgeItemOut,
@@ -61,16 +61,16 @@ async def list_requests(
     return ApiResponse(data=await admin_service.list_requests(db, page, page_size))
 
 
-@router.get("/buyers", response_model=ApiResponse[BuyerListResponse], summary="买家列表（搜索/状态筛选，分页）")
-async def list_buyers(
+@router.get("/customers", response_model=ApiResponse[CustomerListResponse], summary="客户列表（搜索/状态筛选，分页）")
+async def list_customers(
     admin: AdminUser,
     keyword: str | None = Query(default=None, description="手机号/邮箱关键词"),
     status: str | None = Query(default=None, description="active/disabled"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_session),
-) -> ApiResponse[BuyerListResponse]:
-    return ApiResponse(data=await admin_service.list_buyers(db, keyword, status, page, page_size))
+) -> ApiResponse[CustomerListResponse]:
+    return ApiResponse(data=await admin_service.list_customers(db, keyword, status, page, page_size))
 
 
 @router.get("/logs", response_model=ApiResponse[AdminLogListResponse], summary="事件日志（审计，按动作筛选，分页）")

@@ -12,7 +12,14 @@ xmsn-demo/
 └── README.md
 ```
 
-## 一键启动（M8 容器化）
+## 一键部署（唯一入口，保证数据全新）
+```bash
+# docker 在 WSL 内，需在 WSL 中执行：
+wsl -d Ubuntu-22.04 -- bash infra/deploy.sh
+```
+`infra/deploy.sh` = 全铲（`down -v` 清空 PG/Milvus/uploads 数据卷）→ 全新构建 → 启动（api 启动时 `create_all` 建全新空表）→ 全量重灌演示数据（`seed_curated --reset`，10 家智能音箱厂商 + 10 份 PDF + 知识 + 客户/管理员/厂家账号）。**数据重灌只发生在此部署动作**，容器日常重启不重灌。
+
+## 一键启动（M8 容器化，开发调试）
 ```powershell
 # 1) 配置密钥：复制 infra\.env.example → infra\.env，填写 LLM/Embedding Key
 # 2) 一键构建 + 拉起（PostgreSQL + Milvus + 后端 api + 前端 web，端口 80）
@@ -26,14 +33,14 @@ docker compose exec api python scripts/seed_data.py
 ## 演示账号（种子数据预置，passed）
 | 角色 | 手机号 | 密码 | 入口 |
 | --- | --- | --- | --- |
-| 买家 | 13912345678 | buyer123 | http://localhost:5173（对话萃取→提交匹配→结果→查看原文） |
+| 客户 | 13912345678 | customer123 | http://localhost:5173（对话萃取→提交匹配→结果→查看原文） |
 | 厂商 | 18812345678 | vendor123 | http://localhost:5173（上传文档→AI 能力档案） |
-| 管理员 | 13800000000 | 123456 | http://localhost:5174（数据概览/需求/厂商/买家/日志） |
+| 管理员 | 13800000000 | 123456 | http://localhost:5174（数据概览/需求/厂商/客户/日志） |
 
 ## 本地开发模式（手动启动，替代容器化）
 - 基础设施：`cd infra && docker compose up -d`（PostgreSQL :5432 + Milvus :19530）
 - 后端：`cd backend && .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000`
-- 买家端：`cd frontend/apps/user-web && $env:VITE_USE_MOCK="false"; npm run dev`（:5173）
+- 客户端：`cd frontend/apps/user-web && $env:VITE_USE_MOCK="false"; npm run dev`（:5173）
 - 管理后台：`cd frontend/apps/admin-web && $env:VITE_USE_MOCK="false"; npm run dev`（:5174）
 - API 文档：http://localhost:8000/docs
 

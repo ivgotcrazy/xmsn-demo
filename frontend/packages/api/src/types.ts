@@ -21,7 +21,7 @@ export type AdminRequestItem = {
   conversation_id: string;
   version: number;
   structured_demand?: Record<string, unknown>;
-  buyer_phone?: string;
+  customer_phone?: string;
   run?: (MatchRun | null);
   created_at: string;
 };
@@ -62,11 +62,6 @@ export type ApiResponse_AuthToken_ = {
   message?: string;
   data?: (AuthToken | null);
 };
-export type ApiResponse_BuyerListResponse_ = {
-  code?: number;
-  message?: string;
-  data?: (BuyerListResponse | null);
-};
 export type ApiResponse_CapabilityOut_ = {
   code?: number;
   message?: string;
@@ -91,6 +86,11 @@ export type ApiResponse_ConversationStartResponse_ = {
   code?: number;
   message?: string;
   data?: (ConversationStartResponse | null);
+};
+export type ApiResponse_CustomerListResponse_ = {
+  code?: number;
+  message?: string;
+  data?: (CustomerListResponse | null);
 };
 export type ApiResponse_DeleteResponse_ = {
   code?: number;
@@ -190,22 +190,6 @@ export type Body_upload_capability_api_v1_vendor_capability_upload_post = {
   vendor_id: string;
   documents?: string[];
 };
-export type BuyerItem = {
-  user_id: string;
-  phone: string;
-  email?: (string | null);
-  status?: "active" | "disabled";
-  conversation_count?: number;
-  request_count?: number;
-  last_active_at?: (string | null);
-  created_at: string;
-};
-export type BuyerListResponse = {
-  list: BuyerItem[];
-  total: number;
-  page: number;
-  page_size: number;
-};
 export type CapabilityOut = {
   capability_id: string;
   vendor_id: string;
@@ -268,6 +252,22 @@ export type ConversationStartResponse = {
   first_message: AssistantMessage;
   demand_points?: DemandPoint[];
   title?: string;
+};
+export type CustomerItem = {
+  user_id: string;
+  phone: string;
+  email?: (string | null);
+  status?: "active" | "disabled";
+  conversation_count?: number;
+  request_count?: number;
+  last_active_at?: (string | null);
+  created_at: string;
+};
+export type CustomerListResponse = {
+  list: CustomerItem[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 export type DeleteResponse = {
   id: string;
@@ -392,7 +392,7 @@ export type RegisterRequest = {
   phone?: (string | null);
   email?: (string | null);
   password: string;
-  role?: "vendor" | "buyer";
+  role?: "vendor" | "customer";
   verify_code?: (string | null);
 };
 export type RequestSnapshot = {

@@ -166,7 +166,7 @@
 - 匹配走 **soft 语义通道**（向量，strict 阈值 0.8）；不参与本体精确判定。
 - **promote 机制（D8）**：同类扩展约束高频出现（按 label 聚类，如"外观"被多买方提及）→ 固化进本体维度配置，此后直接进 `dimensions`（D1 数据驱动，新增维度不改代码）。
 
-### 3.7 需求档案（= 当前需求 = 品类 Schema 的实例，buyer_requests.structured_demand）
+### 3.7 需求档案（= 当前需求 = 品类 Schema 的实例，customer_requests.structured_demand）
 - **需求档案 = 品类 Schema 的实例**：一组需求点（各为需求点 schema 的实例）；**前端"当前需求"就是需求档案本身**（同一概念，D5）——**提交 = 对它的版本化快照**（vN），不再单独定义。
 - **提交门槛（D12）**：品类锚定 + **至少 1 个需求点**（dimensions 或 extended 非空）+ 用户确认；**不允许 0 需求点提交**（后台校验拦截），规避 match_score 分母=0。
 - 档案**只存明确设置的需求点**（正向指定点；wildcard 不入档、无 excluded、strictness 两档），并通过 **`schema_ref`** 指向其品类 Schema（定义），**不内嵌 schema**（D1 单一本体）。

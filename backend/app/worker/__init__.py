@@ -9,7 +9,7 @@ import logging
 
 from sqlalchemy import select
 
-from app.db.models import BuyerRequest, MatchResult, VendorCapability
+from app.db.models import CustomerRequest, MatchResult, VendorCapability
 from app.db.session import SessionLocal
 from app.domains.file_service.parser import extract_pages
 from app.domains.file_service.storage import storage
@@ -40,7 +40,7 @@ async def _explain_match(match_id: str) -> None:
         mr = await db.get(MatchResult, uuid.UUID(match_id))
         if not mr:
             return
-        req = await db.get(BuyerRequest, mr.request_id)
+        req = await db.get(CustomerRequest, mr.request_id)
         if not req:
             return
         cap = (await db.execute(

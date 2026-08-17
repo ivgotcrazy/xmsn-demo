@@ -28,7 +28,7 @@ async function submit(): Promise<void> {
     const res = await authLogin({ phone: form.value.phone, password: form.value.password })
     auth.setAuth(res.access_token, res.user)
     const redirect = route.query.redirect as string | undefined
-    const fallback = res.user.role === "vendor" ? "/vendor/dashboard" : "/buyer/chat"
+    const fallback = res.user.role === "vendor" ? "/vendor/dashboard" : "/customer/chat"
     await router.push(redirect ?? fallback)
   } catch (e) {
     message.error((e as Error).message || "登录失败")

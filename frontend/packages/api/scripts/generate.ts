@@ -167,7 +167,14 @@ function genClient(): string {
       const params = pathParams(path)
       const queries = queryParams(op)
       const body = bodySchema(op)
-      const respType = dataTypeOf(op.responses?.["200"] ?? op.responses?.["201"])
+      const resp = op.responses?.["200"] ?? op.responses?.["201"]
+      const respType = dataTypeOf(resp)
+
+      // 跳过二进制/未类型化接口：FastAPI 对 Response 默认按 application/json 输出空 schema（{}），
+      // 如 /documents/{id}/file 源文件直读 → 由 http.ts 手写 requestBlob 封装
+      const jsonSchema = resp?.content?.["application/json"]?.schema
+      const isTypedJson = !!jsonSchema && Object.keys(jsonSchema).length > 0
+      if (!isTypedJson) continue
 
       const argParts: string[] = []
       for (const p of params) argParts.push(`${camel(p)}: string`)

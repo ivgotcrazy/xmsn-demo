@@ -102,7 +102,7 @@ export const VERDICT_META: Record<Verdict, { label: string; tagType: "success" |
 
 // ============ 审核 / 角色 / 会话 ============
 export type AuditStatus = "pending" | "passed" | "rejected"
-export type UserRole = "vendor" | "buyer" | "admin"
+export type UserRole = "vendor" | "customer" | "admin"
 export type ConversationStatus = "active" | "confirmed" | "closed"
 
 export const AUDIT_META: Record<AuditStatus, { label: string; tagType: "warning" | "success" | "error" }> = {

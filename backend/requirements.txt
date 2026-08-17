@@ -10,7 +10,6 @@ pydantic-settings==2.7.0
 # 数据库（PostgreSQL 16）
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
-alembic==1.14.0
 
 # AI 编排与 LLM（DeepSeek / 智谱均走 OpenAI 兼容 SDK）
 langgraph==0.2.60

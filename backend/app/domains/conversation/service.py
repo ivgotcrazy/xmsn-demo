@@ -2,7 +2,7 @@
 
 - 一会话一产品：会话标题 = 聚焦产品类型（未确定时「新会话」）
 - message 编排：选项精确命中 → 确定性直写；否则 LLM 解析 → merge_slot 三态合并
-- 确认并提交匹配（单端点 confirm）：生成 buyer_requests 快照（version 递增）+ match_runs（running）+ 异步画像
+- 确认并提交匹配（单端点 confirm）：生成 customer_requests 快照（version 递增）+ match_runs（running）+ 异步画像
 - 会话/快照逻辑删除（deleted_at，数据保留）
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ logger = logging.getLogger("xmsn.conversation")
 from app.domains.conversation import agent, schema as req_schema
 from app.domains.conversation import profile
 from app.domains.conversation.schema import SlotTriState
-from app.db.models import BuyerRequest, Conversation, ConversationEvent, MatchRun
+from app.db.models import Conversation, ConversationEvent, CustomerRequest, MatchRun
 from app.schemas.common import err_400, err_404
 from app.schemas.conversation import (
     AssistantMessage,
@@ -442,7 +442,7 @@ async def _do_submit_from_message(
     return MessageResponse(
         assistant_message=AssistantMessage(content=content, options=[]),
         demand_points=to_demand_points(state), title=conv.title,
-        submitted=True, redirect_to=f"/buyer/matches/{req.request_id}", warnings=warnings)
+        submitted=True, redirect_to=f"/customer/matches/{req.request_id}", warnings=warnings)
 
 
 def _delta_summary(delta: dict, state: dict) -> str:
@@ -462,12 +462,12 @@ def _delta_summary(delta: dict, state: dict) -> str:
 
 async def _next_version(db: AsyncSession, conversation_id: uuid.UUID) -> int:
     res = await db.execute(
-        select(func.count()).select_from(BuyerRequest).where(BuyerRequest.conversation_id == conversation_id)
+        select(func.count()).select_from(CustomerRequest).where(CustomerRequest.conversation_id == conversation_id)
     )
     return int(res.scalar_one() or 0) + 1
 
 
-async def _do_confirm(db: AsyncSession, conv: Conversation, demand_points=None) -> tuple[BuyerRequest, MatchRun, list[str]]:
+async def _do_confirm(db: AsyncSession, conv: Conversation, demand_points=None) -> tuple[CustomerRequest, MatchRun, list[str]]:
     """确认提交（D7/D12）：两步化（确认框 strictness 可微调）+ 提交门槛校验。
 
     - 提交门槛（D12）：品类锚定 + 至少 1 个需求点（品类外 dimensions 或 extended 非空）→ 否则 400；
@@ -489,7 +489,7 @@ async def _do_confirm(db: AsyncSession, conv: Conversation, demand_points=None) 
     warnings: list[str] = []
 
     version = await _next_version(db, conv.conversation_id)
-    req = BuyerRequest(
+    req = CustomerRequest(
         conversation_id=conv.conversation_id,
         user_id=conv.user_id,
         version=version,
@@ -517,7 +517,7 @@ async def confirm(db: AsyncSession, conversation_id: str, user_id: str, demand_p
     conv = await _load_conv(db, conversation_id)
     req, _run, warnings = await _do_confirm(db, conv, demand_points)
     return ConfirmResponse(request_id=str(req.request_id), version=req.version,
-                           redirect_to=f"/buyer/matches/{req.request_id}", warnings=warnings)
+                           redirect_to=f"/customer/matches/{req.request_id}", warnings=warnings)
 
 
 async def list_conversations(db: AsyncSession, user_id: str) -> ConversationListResponse:
@@ -530,8 +530,8 @@ async def list_conversations(db: AsyncSession, user_id: str) -> ConversationList
     items = []
     for c in convs:
         rc = await db.execute(
-            select(func.count()).select_from(BuyerRequest).where(
-                BuyerRequest.conversation_id == c.conversation_id, BuyerRequest.deleted_at.is_(None)
+            select(func.count()).select_from(CustomerRequest).where(
+                CustomerRequest.conversation_id == c.conversation_id, CustomerRequest.deleted_at.is_(None)
             )
         )
         items.append(ConversationListItem(
@@ -560,9 +560,9 @@ async def list_messages(db: AsyncSession, conversation_id: str) -> ConversationM
 async def list_requests(db: AsyncSession, conversation_id: str) -> RequestSnapshotListResponse:
     conv = await _load_conv(db, conversation_id)
     res = await db.execute(
-        select(BuyerRequest)
-        .where(BuyerRequest.conversation_id == conv.conversation_id, BuyerRequest.deleted_at.is_(None))
-        .order_by(BuyerRequest.version.asc())
+        select(CustomerRequest)
+        .where(CustomerRequest.conversation_id == conv.conversation_id, CustomerRequest.deleted_at.is_(None))
+        .order_by(CustomerRequest.version.asc())
     )
     reqs = res.scalars().all()
     items = []
@@ -589,8 +589,8 @@ async def delete_request(db: AsyncSession, conversation_id: str, request_id: str
         rid = uuid.UUID(request_id)
     except ValueError:
         raise err_404("需求档案不存在")
-    res = await db.execute(select(BuyerRequest).where(
-        BuyerRequest.request_id == rid, BuyerRequest.conversation_id == conv.conversation_id
+    res = await db.execute(select(CustomerRequest).where(
+        CustomerRequest.request_id == rid, CustomerRequest.conversation_id == conv.conversation_id
     ))
     req = res.scalar_one_or_none()
     if not req:

@@ -1,7 +1,7 @@
 /**
  * MSW mock 数据（手写，契约派生 handlers 的数据来源；架构 5.5）。
  * - T1.6 基础版：覆盖全部接口，支撑示例页自测
- * - T1.9 丰富版：对齐演示故事线（预置厂商/买家/需求/匹配）与 faker 随机
+ * - T1.9 丰富版：对齐演示故事线（预置厂商/客户/需求/匹配）与 faker 随机
  * - 仅 dev 生效（VITE_USE_MOCK），生产构建不含 MSW
  *
  * key 约定："<METHOD> <path>"，与 msw/handlers.ts 生成物一一对应。
@@ -18,11 +18,11 @@ const DEMO_USER_VENDOR = {
   created_at: "2026-08-01T08:00:00Z",
 }
 
-const DEMO_USER_BUYER = {
-  user_id: "u-buyer-001",
+const DEMO_USER_customer = {
+  user_id: "u-customer-001",
   phone: "13900000001",
-  email: "buyer@xmsn.demo",
-  role: "buyer",
+  email: "customer@xmsn.demo",
+  role: "customer",
   status: "active",
   created_at: "2026-08-01T08:00:00Z",
 }
@@ -39,11 +39,11 @@ const DEMO_USER_ADMIN = {
 const DEMO_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock"
 
-/** 按手机号返回不同演示账号（13800000000=管理员 / 13800000001=厂商 / 其他=买家）。 */
+/** 按手机号返回不同演示账号（13800000000=管理员 / 13800000001=厂商 / 其他=客户）。 */
 function resolveDemoUser(phone: string | undefined): (typeof DEMO_USER_ADMIN)[] {
   if (phone === "13800000000") return [DEMO_USER_ADMIN]
   if (phone === "13800000001") return [DEMO_USER_VENDOR]
-  return [DEMO_USER_BUYER]
+  return [DEMO_USER_customer]
 }
 
 /** 演示需求点集合：机顶盒（固定字段 + 扩展需求点：外壳颜色/双系统/海外认证）。 */
@@ -163,16 +163,16 @@ export const mockData: Record<string, MockResolver | unknown> = {
         access_token: DEMO_TOKEN,
         token_type: "bearer",
         expires_in: 604800,
-        user: DEMO_USER_BUYER,
+        user: DEMO_USER_customer,
       })),
   "POST /api/v1/auth/register": () => ({
     access_token: DEMO_TOKEN,
     token_type: "bearer",
     expires_in: 604800,
-    user: DEMO_USER_BUYER,
+    user: DEMO_USER_customer,
   }),
   "POST /api/v1/auth/send-code": () => ({ sent: true }),
-  "GET /api/v1/auth/me": () => DEMO_USER_BUYER,
+  "GET /api/v1/auth/me": () => DEMO_USER_customer,
 
   // ---- vendor ----
   "POST /api/v1/vendor/register": () => ({
@@ -663,19 +663,19 @@ export const mockData: Record<string, MockResolver | unknown> = {
     total_vendors: 6,
     total_matches: 58,
   }),
-  "GET /api/v1/admin/buyers": (request: Request) => {
+  "GET /api/v1/admin/customers": (request: Request) => {
     const url = new URL(request.url)
     const keyword = (url.searchParams.get("keyword") ?? "").trim().toLowerCase()
     const status = url.searchParams.get("status")
     const all = [
-      { user_id: "u-buyer-001", phone: "13900000001", email: "buyer@xmsn.demo", status: "active", conversation_count: 2, request_count: 2, last_active_at: "2026-08-10T08:00:00Z", created_at: "2026-08-01T08:00:00Z" },
-      { user_id: "u-buyer-002", phone: "13912340002", email: "lihua@qq.com", status: "active", conversation_count: 5, request_count: 4, last_active_at: "2026-08-09T14:20:00Z", created_at: "2026-08-02T09:00:00Z" },
-      { user_id: "u-buyer-003", phone: "13912340003", email: "wangfang@163.com", status: "active", conversation_count: 3, request_count: 2, last_active_at: "2026-08-08T11:00:00Z", created_at: "2026-08-03T10:30:00Z" },
-      { user_id: "u-buyer-004", phone: "13912340004", email: "zhangwei@aliyun.com", status: "active", conversation_count: 1, request_count: 1, last_active_at: "2026-08-07T16:45:00Z", created_at: "2026-08-04T13:00:00Z" },
-      { user_id: "u-buyer-005", phone: "13912340005", email: "chenjing@outlook.com", status: "disabled", conversation_count: 4, request_count: 3, last_active_at: "2026-08-05T09:30:00Z", created_at: "2026-08-05T09:00:00Z" },
-      { user_id: "u-buyer-006", phone: "13912340006", email: "liuyang@126.com", status: "active", conversation_count: 7, request_count: 6, last_active_at: "2026-08-10T09:10:00Z", created_at: "2026-08-06T15:20:00Z" },
-      { user_id: "u-buyer-007", phone: "13912340007", email: "zhaolei@qq.com", status: "active", conversation_count: 2, request_count: 1, last_active_at: "2026-08-06T10:00:00Z", created_at: "2026-08-07T08:40:00Z" },
-      { user_id: "u-buyer-008", phone: "13912340008", email: "sunli@163.com", status: "active", conversation_count: 0, request_count: 0, last_active_at: null, created_at: "2026-08-08T12:00:00Z" },
+      { user_id: "u-customer-001", phone: "13900000001", email: "customer@xmsn.demo", status: "active", conversation_count: 2, request_count: 2, last_active_at: "2026-08-10T08:00:00Z", created_at: "2026-08-01T08:00:00Z" },
+      { user_id: "u-customer-002", phone: "13912340002", email: "lihua@qq.com", status: "active", conversation_count: 5, request_count: 4, last_active_at: "2026-08-09T14:20:00Z", created_at: "2026-08-02T09:00:00Z" },
+      { user_id: "u-customer-003", phone: "13912340003", email: "wangfang@163.com", status: "active", conversation_count: 3, request_count: 2, last_active_at: "2026-08-08T11:00:00Z", created_at: "2026-08-03T10:30:00Z" },
+      { user_id: "u-customer-004", phone: "13912340004", email: "zhangwei@aliyun.com", status: "active", conversation_count: 1, request_count: 1, last_active_at: "2026-08-07T16:45:00Z", created_at: "2026-08-04T13:00:00Z" },
+      { user_id: "u-customer-005", phone: "13912340005", email: "chenjing@outlook.com", status: "disabled", conversation_count: 4, request_count: 3, last_active_at: "2026-08-05T09:30:00Z", created_at: "2026-08-05T09:00:00Z" },
+      { user_id: "u-customer-006", phone: "13912340006", email: "liuyang@126.com", status: "active", conversation_count: 7, request_count: 6, last_active_at: "2026-08-10T09:10:00Z", created_at: "2026-08-06T15:20:00Z" },
+      { user_id: "u-customer-007", phone: "13912340007", email: "zhaolei@qq.com", status: "active", conversation_count: 2, request_count: 1, last_active_at: "2026-08-06T10:00:00Z", created_at: "2026-08-07T08:40:00Z" },
+      { user_id: "u-customer-008", phone: "13912340008", email: "sunli@163.com", status: "active", conversation_count: 0, request_count: 0, last_active_at: null, created_at: "2026-08-08T12:00:00Z" },
     ]
     let list = all
     if (status) list = list.filter((b) => b.status === status)
@@ -695,7 +695,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
           os_support: ["Linux"],
           min_order_qty: 5000,
         },
-        buyer_phone: "13900000001",
+        customer_phone: "13900000001",
         created_at: "2026-08-05T09:30:00Z",
         run: {
           run_id: "run-001",
@@ -712,7 +712,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
         conversation_id: "conv-003",
         version: 1,
         structured_demand: { product_type: "智能音箱", os_support: ["Android"] },
-        buyer_phone: "13912340002",
+        customer_phone: "13912340002",
         created_at: "2026-08-06T07:00:00Z",
         run: {
           run_id: "run-002",
@@ -729,7 +729,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
         conversation_id: "conv-002",
         version: 1,
         structured_demand: { product_type: "智能音箱", os_support: ["Linux"], appearance: "白色" },
-        buyer_phone: "13912340005",
+        customer_phone: "13912340005",
         created_at: "2026-08-09T11:00:00Z",
         run: {
           run_id: "run-003",
@@ -757,7 +757,7 @@ export const mockData: Record<string, MockResolver | unknown> = {
       { log_id: "log-005", action: "export", action_label: "导出数据", target_type: "request", target_id: "req-001", admin_name: "管理员", detail: { file: "requests.csv", rows: 3 }, created_at: "2026-08-10T10:20:00Z" },
       { log_id: "log-006", action: "config_change", action_label: "配置变更", target_type: "config", target_id: "match_threshold", admin_name: "管理员", detail: { key: "match_threshold", value: 0.3 }, created_at: "2026-08-08T14:00:00Z" },
       { log_id: "log-007", action: "vendor_audit", action_label: "厂商审核", target_type: "vendor", target_id: "v-002", admin_name: "管理员", detail: { result: "驳回", vendor: "深圳智联科技", comment: "资料不完整" }, created_at: "2026-08-05T11:30:00Z" },
-      { log_id: "log-008", action: "export", action_label: "导出数据", target_type: "buyer", target_id: "u-buyer-001", admin_name: "管理员", detail: { file: "requests.csv", rows: 8 }, created_at: "2026-08-10T11:00:00Z" },
+      { log_id: "log-008", action: "export", action_label: "导出数据", target_type: "customer", target_id: "u-customer-001", admin_name: "管理员", detail: { file: "requests.csv", rows: 8 }, created_at: "2026-08-10T11:00:00Z" },
     ]
     const list = action ? all.filter((l) => l.action === action) : all
     return { list, total: list.length, page: 1, page_size: 20 }

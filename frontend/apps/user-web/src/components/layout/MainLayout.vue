@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 买家端布局（会话一体化）：顶部品牌 + 用户/退出；无菜单（买家端仅 02A 一页）。
+ * 客户端布局（会话一体化）：顶部品牌 + 用户/退出；无菜单（客户端仅 02A 一页）。
  */
 import { useRouter } from "vue-router"
 import { NButton } from "naive-ui"
@@ -19,11 +19,11 @@ function logout(): void {
 <template>
   <div class="main-layout">
     <header class="main-layout__nav">
-      <div class="main-layout__brand" @click="router.push('/buyer/chat')">需脉枢纽</div>
+      <div class="main-layout__brand" @click="router.push('/customer/chat')">需脉枢纽</div>
       <div class="main-layout__spacer" />
       <div class="main-layout__user">
         <span class="main-layout__who">
-          买家<span v-if="auth.user"> · {{ auth.user.phone }}</span>
+          客户<span v-if="auth.user"> · {{ auth.user.phone }}</span>
         </span>
         <NButton text size="small" @click="logout()">退出登录</NButton>
       </div>
