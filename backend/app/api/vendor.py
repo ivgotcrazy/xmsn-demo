@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser
 from app.db.session import get_session
 from app.domains.vendor_service import service as vendor_service
-from app.schemas.common import ApiResponse, err_404, err_501
+from app.schemas.common import ApiResponse, err_404
 from app.schemas.vendor import CapabilityOut, VendorOut, VendorRegisterRequest
 
 router = APIRouter(prefix="/vendor", tags=["vendor"])
@@ -23,8 +23,13 @@ async def register_vendor(
 
 
 @router.get("/{vendor_id}", response_model=ApiResponse[VendorOut], summary="厂商档案")
-async def get_vendor(vendor_id: str, user: CurrentUser) -> ApiResponse[VendorOut]:
-    raise err_501("契约层占位：M2 实现")
+async def get_vendor(
+    vendor_id: str, user: CurrentUser, db: AsyncSession = Depends(get_session)
+) -> ApiResponse[VendorOut]:
+    vendor = await vendor_service.get_vendor(db, vendor_id)
+    if not vendor:
+        raise err_404("厂商不存在")
+    return ApiResponse(data=vendor)
 
 
 @router.post("/capability/upload", response_model=ApiResponse[CapabilityOut], summary="能力录入（仅上传文档，AI 解析）")

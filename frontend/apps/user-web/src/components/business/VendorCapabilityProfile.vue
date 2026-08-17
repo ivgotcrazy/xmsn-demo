@@ -8,7 +8,7 @@
 import { computed, ref } from "vue"
 import { NButton, NModal, NSpin, NTag } from "naive-ui"
 
-import { documentsDocIdPreview, type CapabilityOut, type DocumentPreviewResponse } from "@xmsn/api"
+import { documentsDocIdFile, type CapabilityOut } from "@xmsn/api"
 import { CAPABILITY_SCHEMA_FIELDS } from "@xmsn/types"
 
 const props = defineProps<{ capability: CapabilityOut | null }>()
@@ -42,8 +42,9 @@ const completeness = computed(() =>
   hardFields.value.length === 0 ? 0 : filledHardCount.value / hardFields.value.length,
 )
 
-// 每个字段的溯源+置信度（source_map: key → { doc_name, page, confidence }）
+// 每个字段的溯源+置信度（source_map: key → { doc_id, doc_name, page, chunk_text, confidence }）
 interface SourceRef {
+  doc_id?: string
   doc_name?: string
   page?: number
   chunk_text?: string
@@ -66,21 +67,29 @@ const lowConfidenceFields = computed(() =>
   }),
 )
 
-// 原始文档 → 全屏预览（溯源点击：带页码）
+// 原始文档 → 全屏预览（溯源点击：打开真实源文件，非文本提取）
 const previewOpen = ref(false)
 const previewLoading = ref(false)
-const preview = ref<DocumentPreviewResponse | null>(null)
+const previewUrl = ref<string | null>(null)
 const previewTitle = ref("")
 
+function revokePreview(): void {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
+  }
+}
+
 async function openDoc(docName?: string, docId?: string, page?: number): Promise<void> {
-  previewTitle.value = `${docName ?? "原始文档"}${page ? ` · 第 ${page} 页` : ""}`
+  previewTitle.value = `${docName ?? "原始文档"}${page ? ` · 引用第 ${page} 页` : ""}`
   previewOpen.value = true
   previewLoading.value = true
-  preview.value = null
+  revokePreview()
   try {
-    preview.value = await documentsDocIdPreview(docId ?? "doc-001", page ?? 1)
+    const blob = await documentsDocIdFile(docId ?? "")
+    previewUrl.value = URL.createObjectURL(blob)
   } catch {
-    preview.value = null
+    previewUrl.value = null
   } finally {
     previewLoading.value = false
   }
@@ -179,7 +188,7 @@ async function openDoc(docName?: string, docId?: string, page?: number): Promise
               text
               size="small"
               type="primary"
-              @click="openDoc(sourceOf(f.key)!.doc_name, undefined, sourceOf(f.key)!.page)"
+              @click="openDoc(sourceOf(f.key)!.doc_name, sourceOf(f.key)!.doc_id, sourceOf(f.key)!.page)"
             >
               {{ sourceOf(f.key)!.doc_name }} · 第 {{ sourceOf(f.key)!.page }} 页
             </NButton>
@@ -221,7 +230,7 @@ async function openDoc(docName?: string, docId?: string, page?: number): Promise
               text
               size="small"
               type="primary"
-              @click="openDoc(sourceOf(f.key)!.doc_name, undefined, sourceOf(f.key)!.page)"
+              @click="openDoc(sourceOf(f.key)!.doc_name, sourceOf(f.key)!.doc_id, sourceOf(f.key)!.page)"
             >
               {{ sourceOf(f.key)!.doc_name }} · 第 {{ sourceOf(f.key)!.page }} 页
             </NButton>
@@ -230,19 +239,21 @@ async function openDoc(docName?: string, docId?: string, page?: number): Promise
       </div>
     </section>
 
-    <!-- 全屏文档预览 -->
+    <!-- 全屏源文件预览（iframe 内嵌真实 PDF，非文本提取） -->
     <NModal
       v-model:show="previewOpen"
       preset="card"
       :title="previewTitle"
       style="width: 94vw; max-width: 1400px; height: 92vh"
+      @after-leave="revokePreview"
     >
       <NSpin :show="previewLoading">
-        <template v-if="preview">
-          <div class="capability__preview-meta">{{ preview.doc_name }} · 第 {{ preview.page }} 页</div>
-          <p class="capability__preview-content">{{ preview.content }}</p>
-          <mark class="capability__preview-highlight">{{ preview.highlight }}</mark>
-        </template>
+        <iframe
+          v-if="previewUrl"
+          :src="previewUrl"
+          class="capability__preview-frame"
+          title="源文件预览"
+        ></iframe>
       </NSpin>
     </NModal>
   </div>
@@ -445,17 +456,10 @@ async function openDoc(docName?: string, docId?: string, page?: number): Promise
   color: var(--color-error-text);
 }
 
-.capability__preview-meta {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-8);
-}
-.capability__preview-content {
-  line-height: var(--line-height-loose);
-}
-.capability__preview-highlight {
-  background: var(--color-warning-bg);
-  padding: 0 4px;
-  border-radius: var(--radius-4);
+.capability__preview-frame {
+  width: 100%;
+  height: calc(92vh - 130px);
+  border: none;
+  border-radius: var(--radius-8);
 }
 </style>

@@ -15,6 +15,10 @@ alembic==1.14.0
 # AI 编排与 LLM（DeepSeek / 智谱均走 OpenAI 兼容 SDK）
 langgraph==0.2.60
 openai==1.58.1
+# 文本递归切分（厂商能力文档向量化；按 token 度量，兼容 embedding-2 单条 512 token 上限）
+langchain-text-splitters==0.3.6
+# token 近似计数（embedding-2 单条 512 / 批量 8K 上限；无官方 tokenizer，用 tiktoken 近似）
+tiktoken==0.8.0
 
 # 向量数据库（Milvus）——2.5+ 提供 AsyncMilvusClient（2.4 仅有同步 MilvusClient）
 pymilvus==2.5.4

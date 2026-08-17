@@ -7,8 +7,7 @@ import { computed, ref } from "vue"
 import { NButton, NModal, NSpin, NTag } from "naive-ui"
 
 import {
-  documentsDocIdPreview,
-  type DocumentPreviewResponse,
+  documentsDocIdFile,
   type MatchDetailResponse,
   type MatchItem,
 } from "@xmsn/types"
@@ -41,19 +40,36 @@ const hitText = computed(() => {
   return `参数命中 ${matched}/${total}`
 })
 
-// 行内文档引用 → 全屏预览（原文定位高亮）
+// 行内文档引用 → 全屏预览（打开真实源文件，非文本提取）
 const previewOpen = ref(false)
 const previewLoading = ref(false)
-const preview = ref<DocumentPreviewResponse | null>(null)
+const previewUrl = ref<string | null>(null)
+const previewTitle = ref("厂商原始文档")
 
-async function openPreview(sourceDocId?: string | null, sourcePage?: number | null): Promise<void> {
+/** 页码格式：chunk 的 page 可能是范围串 "2~3" → 显示 "2-3"；单页 "2" → "2"。 */
+function fmtPage(p?: string | number | null): string {
+  if (p === undefined || p === null || p === "") return ""
+  const s = String(p)
+  return s.includes("~") ? s.replace("~", "-") : s
+}
+
+function revokePreview(): void {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
+  }
+}
+
+async function openPreview(sourceDocId?: string | null, sourcePage?: string | number | null): Promise<void> {
+  previewTitle.value = sourcePage ? `厂商原始文档 · 引用第 ${fmtPage(sourcePage)} 页` : "厂商原始文档"
   previewOpen.value = true
   previewLoading.value = true
-  preview.value = null
+  revokePreview()
   try {
-    preview.value = await documentsDocIdPreview(sourceDocId ?? "doc-001", sourcePage ?? 1)
+    const blob = await documentsDocIdFile(sourceDocId ?? "")
+    previewUrl.value = URL.createObjectURL(blob)
   } catch {
-    preview.value = null
+    previewUrl.value = null
   } finally {
     previewLoading.value = false
   }
@@ -98,7 +114,7 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
                 class="cite"
                 @click="openPreview(p.source_doc_id, p.source_page)"
               >
-                📄 第 {{ p.source_page }} 页
+                📄 第 {{ fmtPage(p.source_page) }} 页
               </NButton>
             </li>
           </ul>
@@ -110,19 +126,21 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
       </template>
     </NSpin>
 
-    <!-- 全屏文档预览（引用原文定位高亮） -->
+    <!-- 全屏源文件预览（iframe 内嵌真实 PDF，非文本提取） -->
     <NModal
       v-model:show="previewOpen"
       preset="card"
-      title="厂商原始文档"
+      :title="previewTitle"
       style="width: 94vw; max-width: 1400px; height: 92vh"
+      @after-leave="revokePreview"
     >
       <NSpin :show="previewLoading">
-        <template v-if="preview">
-          <div class="preview__meta">{{ preview.doc_name }} · 第 {{ preview.page }} 页</div>
-          <p class="preview__content">{{ preview.content }}</p>
-          <mark class="preview__highlight">{{ preview.highlight }}</mark>
-        </template>
+        <iframe
+          v-if="previewUrl"
+          :src="previewUrl"
+          class="preview__frame"
+          title="源文件预览"
+        ></iframe>
       </NSpin>
     </NModal>
   </div>
@@ -249,17 +267,10 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: number | nu
   margin: 0;
   font-size: var(--font-size-20);
 }
-.preview__meta {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-8);
-}
-.preview__content {
-  line-height: var(--line-height-loose);
-}
-.preview__highlight {
-  background: var(--color-warning-bg);
-  padding: 0 4px;
-  border-radius: var(--radius-4);
+.preview__frame {
+  width: 100%;
+  height: calc(92vh - 130px);
+  border: none;
+  border-radius: var(--radius-8);
 }
 </style>

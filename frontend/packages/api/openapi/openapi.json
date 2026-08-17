@@ -2711,6 +2711,14 @@
             "type": "array",
             "title": "Doc Urls",
             "description": "文档名列表"
+          },
+          "doc_refs": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Doc Refs",
+            "description": "文档引用 [{file_id, name}]，用于 PDF 预览定位"
           }
         },
         "type": "object",
@@ -3053,6 +3061,15 @@
             ],
             "title": "Value"
           },
+          "strictness": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "best-effort"
+            ],
+            "title": "Strictness",
+            "default": "best-effort"
+          },
           "confidence": {
             "type": "number",
             "title": "Confidence",
@@ -3066,7 +3083,7 @@
           "value"
         ],
         "title": "DemandPoint",
-        "description": "会话中萃取的单一需求点（前端「当前需求」展示单元，不感知 schema；固定/扩展由后端映射）。"
+        "description": "会话中萃取的单一需求点（D5：需求点 = 需求点 schema 实例；label 由品类 Schema 提供）。\n\nvalue + strictness（D7 两档）；extended 扩展需求点 label 为自由展示标签（D8）。"
       },
       "DocumentPreviewResponse": {
         "properties": {
@@ -3376,12 +3393,41 @@
             "type": "array",
             "title": "Partial Params"
           },
+          "missing_params": {
+            "items": {
+              "$ref": "#/components/schemas/MatchParam"
+            },
+            "type": "array",
+            "title": "Missing Params"
+          },
           "unmatched_params": {
             "items": {
               "$ref": "#/components/schemas/MatchParam"
             },
             "type": "array",
             "title": "Unmatched Params"
+          },
+          "match_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Reason"
+          },
+          "risk_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Warning"
           },
           "ai_comment": {
             "anyOf": [
@@ -3412,7 +3458,7 @@
           "company_name"
         ],
         "title": "MatchDetailResponse",
-        "description": "匹配详情（含解释；异步生成，未生成时 explanation_status=pending 返回骨架标记，前端轮询）。"
+        "description": "匹配详情（含解释；异步生成，未生成时 explanation_status=pending 返回骨架标记，前端轮询）。\n\n四组判定（D10：missing 独立成组，不并入 partial）；match_reason/risk_warning（D4 顾问级解释）。"
       },
       "MatchItem": {
         "properties": {
@@ -3465,22 +3511,6 @@
             ],
             "title": "Semantic Score"
           },
-          "param_hit_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Param Hit Rate"
-          },
-          "critical_fail": {
-            "type": "boolean",
-            "title": "Critical Fail",
-            "default": false
-          },
           "match_source": {
             "type": "string",
             "enum": [
@@ -3494,6 +3524,16 @@
           "matched_count": {
             "type": "integer",
             "title": "Matched Count",
+            "default": 0
+          },
+          "partial_count": {
+            "type": "integer",
+            "title": "Partial Count",
+            "default": 0
+          },
+          "missing_count": {
+            "type": "integer",
+            "title": "Missing Count",
             "default": 0
           },
           "unmatched_count": {
@@ -3530,9 +3570,15 @@
             "enum": [
               "matched",
               "partial",
+              "missing",
               "unmatched"
             ],
             "title": "Verdict"
+          },
+          "strictness": {
+            "type": "string",
+            "title": "Strictness",
+            "default": "best-effort"
           },
           "source_doc_id": {
             "anyOf": [
@@ -3587,7 +3633,7 @@
           "verdict"
         ],
         "title": "MatchParam",
-        "description": "单条参数判定（仅对买家已指定参数判定；出处引用指向厂商原始文档）。\n\npartial 语义为“需协商·厂商未声明”：买家已指定但厂商能力档案未声明/部分覆盖。"
+        "description": "单条需求点判定（四档 D10：matched/partial/missing/unmatched，missing 独立；source 溯源指向厂商原始文档）。"
       },
       "MatchRun": {
         "properties": {

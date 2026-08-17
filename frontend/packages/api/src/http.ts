@@ -78,6 +78,25 @@ export async function request<T>(url: string, opts: RequestOptions = {}): Promis
   return (envelope.data !== undefined ? envelope.data : json) as T
 }
 
+/** 二进制请求（非 JSON 信封）：JWT 注入 + 返回 Blob（供 iframe 内嵌预览 / 下载）。 */
+export async function requestBlob(url: string, opts: RequestOptions = {}): Promise<Blob> {
+  const h: Record<string, string> = {}
+  const token = getToken()
+  if (token) h.Authorization = `Bearer ${token}`
+  const res = await fetch(url, {
+    method: opts.method || "GET",
+    headers: h,
+    signal: opts.signal,
+  })
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`)
+  return await res.blob()
+}
+
+/** 厂商原始文档直读（源文件，非文本提取）：GET /api/v1/documents/{docId}/file → Blob。 */
+export async function documentsDocIdFile(docId: string): Promise<Blob> {
+  return requestBlob(`/api/v1/documents/${encodeURIComponent(docId)}/file`)
+}
+
 /** SSE 流式对话（架构 5.4：OpenAPI 无法描述流式响应，fetch + ReadableStream 封装）。 */
 export async function* sseStream<T = string>(url: string, opts: RequestOptions = {}): AsyncGenerator<T> {
   const h: Record<string, string> = {}

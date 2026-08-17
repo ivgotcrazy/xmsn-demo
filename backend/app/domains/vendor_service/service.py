@@ -43,6 +43,23 @@ async def register_vendor(db: AsyncSession, user_id: str, payload: VendorRegiste
     )
 
 
+async def get_vendor(db: AsyncSession, vendor_id) -> VendorOut | None:
+    """厂商档案（01B 只读）：按 vendor_id 返回企业基本信息。"""
+    res = await db.execute(select(Vendor).where(Vendor.vendor_id == vendor_id))
+    vendor = res.scalar_one_or_none()
+    if not vendor:
+        return None
+    return VendorOut(
+        vendor_id=str(vendor.vendor_id),
+        company_name=vendor.company_name,
+        location=vendor.location,
+        main_industry=vendor.main_industry,
+        credit_code=vendor.credit_code,
+        audit_status=vendor.audit_status,
+        created_at=vendor.created_at,
+    )
+
+
 async def _to_out(cap: VendorCapability, audit_status: str) -> CapabilityOut:
     return CapabilityOut(
         capability_id=str(cap.capability_id),
@@ -57,6 +74,7 @@ async def _to_out(cap: VendorCapability, audit_status: str) -> CapabilityOut:
         source_map=cap.source_map or {},
         raw_text=cap.raw_text,
         doc_urls=cap.doc_urls or [],
+        doc_refs=cap.doc_refs or [],
     )
 
 

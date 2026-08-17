@@ -22,11 +22,10 @@ import {
 import {
   adminVendors,
   adminVendorsVendorIdAudit,
-  documentsDocIdPreview,
+  documentsDocIdFile,
   vendorCapabilityVendorId,
   vendorVendorId,
   type CapabilityOut,
-  type DocumentPreviewResponse,
   type VendorAuditItem,
   type VendorOut,
 } from "@xmsn/api"
@@ -44,19 +43,35 @@ const currentVendor = ref<VendorAuditItem | null>(null)
 const vendorDetail = ref<VendorOut | null>(null)
 const capDetail = ref<CapabilityOut | null>(null)
 const detailLoading = ref(false)
+// 原始资料文档引用（[{file_id,name}]，file_id 用于源文件直读）
+const capDocRefs = computed<{ file_id: string; name: string }[]>(
+  () => (capDetail.value?.doc_refs ?? []) as { file_id: string; name: string }[],
+)
 
-// 原始资料文档预览（COMP-034）
+// 原始资料源文件预览（COMP-034）：打开真实 PDF（非文本提取）
 const previewOpen = ref(false)
-const preview = ref<DocumentPreviewResponse | null>(null)
-async function openDocPreview(name: string): Promise<void> {
-  previewOpen.value = true
-  preview.value = null
-  try {
-    preview.value = await documentsDocIdPreview("doc-001", 3)
-  } catch {
-    preview.value = null
+const previewLoading = ref(false)
+const previewUrl = ref<string | null>(null)
+const previewName = ref("")
+function revokePreview(): void {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
   }
-  void name
+}
+async function openDocPreview(doc: { file_id: string; name: string }): Promise<void> {
+  previewName.value = doc.name
+  previewOpen.value = true
+  previewLoading.value = true
+  revokePreview()
+  try {
+    const blob = await documentsDocIdFile(doc.file_id)
+    previewUrl.value = URL.createObjectURL(blob)
+  } catch {
+    previewUrl.value = null
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 const filtered = computed(() => {
@@ -259,15 +274,15 @@ onMounted(() => {
             <div v-if="capDetail">
               <h4 class="vendors-page__sub">文本片段</h4>
               <p class="vendors-page__raw">{{ capDetail.raw_text ?? "—" }}</p>
-              <h4 class="vendors-page__sub">文档（点击预览）</h4>
-              <ul v-if="capDetail.doc_urls?.length" class="vendors-page__docs">
+              <h4 class="vendors-page__sub">文档（点击打开源文件）</h4>
+              <ul v-if="capDocRefs.length" class="vendors-page__docs">
                 <li
-                  v-for="d in capDetail.doc_urls"
-                  :key="d"
+                  v-for="d in capDocRefs"
+                  :key="d.file_id"
                   class="vendors-page__doc"
                   @click="openDocPreview(d)"
                 >
-                  📄 {{ d }}
+                  📄 {{ d.name }}
                 </li>
               </ul>
             </div>
@@ -276,14 +291,21 @@ onMounted(() => {
       </NSpin>
     </NDrawer>
 
-    <NModal v-model:show="previewOpen" preset="card" title="文档预览（定位高亮）" style="width: 640px">
-      <template v-if="preview">
-        <div class="vendors-page__preview-meta">
-          {{ preview.doc_name }} · 第 {{ preview.page }} 页
-        </div>
-        <p class="vendors-page__preview-content">{{ preview.content }}</p>
-        <mark class="vendors-page__preview-hl">{{ preview.highlight }}</mark>
-      </template>
+    <NModal
+      v-model:show="previewOpen"
+      preset="card"
+      :title="previewName || '源文件预览'"
+      style="width: 94vw; max-width: 1400px; height: 92vh"
+      @after-leave="revokePreview"
+    >
+      <NSpin :show="previewLoading">
+        <iframe
+          v-if="previewUrl"
+          :src="previewUrl"
+          class="vendors-page__preview-frame"
+          title="源文件预览"
+        ></iframe>
+      </NSpin>
     </NModal>
   </div>
 </template>
@@ -384,17 +406,10 @@ onMounted(() => {
 .vendors-page__doc:hover {
   text-decoration: underline;
 }
-.vendors-page__preview-meta {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-8);
-}
-.vendors-page__preview-content {
-  line-height: var(--line-height-loose);
-}
-.vendors-page__preview-hl {
-  background: var(--color-warning-bg);
-  padding: 0 4px;
-  border-radius: var(--radius-4);
+.vendors-page__preview-frame {
+  width: 100%;
+  height: calc(92vh - 130px);
+  border: none;
+  border-radius: var(--radius-8);
 }
 </style>

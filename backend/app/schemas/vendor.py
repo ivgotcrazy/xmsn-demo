@@ -55,3 +55,7 @@ class CapabilityOut(BaseModel):
     )
     raw_text: str | None = Field(default=None, description="文档原文片段")
     doc_urls: list[str] = Field(default_factory=list, description="文档名列表")
+    # 文档引用 [{file_id, name}]：供「查看厂商能力」页对 PDF 预览定位（/documents/{file_id}/preview）
+    doc_refs: list[dict] = Field(
+        default_factory=list, description="文档引用 [{file_id, name}]，用于 PDF 预览定位"
+    )

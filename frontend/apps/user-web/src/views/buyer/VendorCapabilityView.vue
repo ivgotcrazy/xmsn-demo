@@ -3,16 +3,15 @@
  * 买家端厂商能力页（02B 独立页 / COMP-029）：单页三块紧凑——厂商基本信息 / 厂商能力档案 / 厂商能力文档。
  * 从匹配结果页「查看厂商能力」进入；返回回匹配结果页。
  */
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { NButton, NModal, NSpin, NTag, useMessage } from "naive-ui"
 
 import {
-  documentsDocIdPreview,
+  documentsDocIdFile,
   vendorCapabilityVendorId,
   vendorVendorId,
   type CapabilityOut,
-  type DocumentPreviewResponse,
   type VendorOut,
 } from "@xmsn/api"
 
@@ -39,21 +38,32 @@ function display(v: unknown): string {
   return Array.isArray(v) ? v.join("、") : String(v ?? "")
 }
 
-// 能力文档 → 大尺寸预览
+// 能力文档 → 大尺寸预览（doc_refs 由后端暴露 [{file_id, name}]，file_id 用于源文件直读）
+type DocRef = { file_id: string; name: string }
+const docRefs = computed<DocRef[]>(() => (cap.value?.doc_refs ?? []) as DocRef[])
+
 const previewOpen = ref(false)
 const previewLoading = ref(false)
-const preview = ref<DocumentPreviewResponse | null>(null)
+const previewUrl = ref<string | null>(null)
 const previewDocName = ref("")
 
-async function openDoc(docName?: string): Promise<void> {
-  previewDocName.value = docName ?? "原始文档"
+function revokePreview(): void {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
+  }
+}
+
+async function openDoc(doc: DocRef): Promise<void> {
+  previewDocName.value = doc.name ?? "原始文档"
   previewOpen.value = true
   previewLoading.value = true
-  preview.value = null
+  revokePreview()
   try {
-    preview.value = await documentsDocIdPreview("doc-001", 1)
+    const blob = await documentsDocIdFile(doc.file_id)
+    previewUrl.value = URL.createObjectURL(blob)
   } catch {
-    preview.value = null
+    message.error("打开源文件失败")
   } finally {
     previewLoading.value = false
   }
@@ -99,7 +109,13 @@ onMounted(async () => {
         </div>
       </section>
 
-      <!-- ② 厂商能力档案 -->
+      <!-- ② 厂商能力概要（summary 独立展示） -->
+      <section v-if="cap?.summary_text" class="vendor-block">
+        <h3>厂商能力概要</h3>
+        <p class="vendor-block__summary">{{ cap.summary_text }}</p>
+      </section>
+
+      <!-- ③ 厂商能力档案 -->
       <section v-if="cap" class="vendor-block">
         <h3>厂商能力档案</h3>
         <div class="vendor-block__tags">
@@ -108,36 +124,35 @@ onMounted(async () => {
             <span class="vendor-block__v">{{ display(v) }}</span>
           </div>
         </div>
-        <p v-if="cap.summary_text" class="vendor-block__summary">{{ cap.summary_text }}</p>
       </section>
 
-      <!-- ③ 厂商能力文档 -->
+      <!-- ④ 厂商能力文档（仅原始文档，点击打开查阅） -->
       <section v-if="cap" class="vendor-block">
         <h3>厂商能力文档</h3>
-        <div v-if="cap.raw_text" class="vendor-block__raw">
-          <p>{{ cap.raw_text }}</p>
-        </div>
-        <div v-if="cap.doc_urls?.length" class="vendor-block__docs">
-          <NButton v-for="d in cap.doc_urls" :key="d" text class="doc" @click="openDoc(d)">
-            📄 {{ d }}
+        <div v-if="docRefs.length" class="vendor-block__docs">
+          <NButton v-for="d in docRefs" :key="d.file_id" text class="doc" @click="openDoc(d)">
+            📄 {{ d.name }}
           </NButton>
         </div>
+        <p v-else class="vendor-block__empty">暂无能力文档</p>
       </section>
     </div>
 
-    <!-- 大尺寸文档预览 -->
+    <!-- 大尺寸源文件预览（iframe 内嵌真实 PDF，非文本提取） -->
     <NModal
       v-model:show="previewOpen"
       preset="card"
       :title="previewDocName"
       style="width: 94vw; max-width: 1400px; height: 92vh"
+      @after-leave="revokePreview"
     >
       <NSpin :show="previewLoading">
-        <template v-if="preview">
-          <div class="preview__meta">{{ preview.doc_name }} · 第 {{ preview.page }} 页</div>
-          <p class="preview__content">{{ preview.content }}</p>
-          <mark class="preview__highlight">{{ preview.highlight }}</mark>
-        </template>
+        <iframe
+          v-if="previewUrl"
+          :src="previewUrl"
+          class="preview__frame"
+          title="源文件预览"
+        ></iframe>
       </NSpin>
     </NModal>
   </div>
@@ -218,37 +233,28 @@ onMounted(async () => {
   word-break: break-all;
 }
 .vendor-block__summary {
-  margin: var(--space-12) 0 0;
+  margin: 0;
   line-height: var(--line-height-loose);
   font-size: var(--font-size-14);
 }
-.vendor-block__raw p {
-  margin: 0;
-  font-size: var(--font-size-13);
-  line-height: var(--line-height-loose);
-  word-break: break-all;
-}
 .vendor-block__docs {
-  margin-top: var(--space-12);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   align-items: flex-start;
 }
+.vendor-block__empty {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
 .vendor-block__docs .doc {
   color: var(--color-primary);
 }
-.preview__meta {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-8);
-}
-.preview__content {
-  line-height: var(--line-height-loose);
-}
-.preview__highlight {
-  background: var(--color-warning-bg);
-  padding: 0 4px;
-  border-radius: var(--radius-4);
+.preview__frame {
+  width: 100%;
+  height: calc(92vh - 130px);
+  border: none;
+  border-radius: var(--radius-8);
 }
 </style>

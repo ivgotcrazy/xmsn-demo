@@ -7,6 +7,7 @@ services:
   postgres:
     image: postgres:16
     container_name: xmsn-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: xumai
       POSTGRES_PASSWORD: xumai
@@ -24,6 +25,7 @@ services:
   milvus:
     image: milvusdb/milvus:v2.4.9
     container_name: xmsn-milvus
+    restart: unless-stopped
     command: ["milvus", "run", "standalone"]
     environment:
       ETCD_USE_EMBED: "true"
@@ -39,6 +41,7 @@ services:
     build:
       context: ../backend
     container_name: xmsn-api
+    restart: unless-stopped
     env_file: .env
     environment:
       # 服务间连接用 compose 服务名（覆盖 .env 里的 localhost 占位）
@@ -64,6 +67,7 @@ services:
     build:
       context: ../frontend
     container_name: xmsn-web
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:

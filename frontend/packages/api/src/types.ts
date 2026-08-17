@@ -219,6 +219,7 @@ export type CapabilityOut = {
   source_map?: Record<string, unknown>;
   raw_text?: (string | null);
   doc_urls?: string[];
+  doc_refs?: Record<string, unknown>[];
 };
 export type ConfirmRequest = {
   conversation_id: string;
@@ -359,7 +360,7 @@ export type MatchParam = {
   label: string;
   value: string;
   verdict: "matched" | "partial" | "missing" | "unmatched";
-  strictness?: "strict" | "best-effort";
+  strictness?: string;
   source_doc_id?: (string | null);
   source_doc_name?: (string | null);
   source_page?: (number | null);
