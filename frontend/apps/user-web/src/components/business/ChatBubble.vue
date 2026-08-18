@@ -45,7 +45,7 @@ defineProps<{
   background: var(--color-primary);
 }
 .chat-bubble--user .chat-bubble__avatar {
-  background: var(--color-text-secondary);
+  background: var(--color-accent);
 }
 .chat-bubble__body {
   padding: var(--space-12) var(--space-16);

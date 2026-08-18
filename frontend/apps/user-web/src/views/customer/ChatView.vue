@@ -3,7 +3,7 @@
  * 02A 需求对话 Agent（原型）：顶部标题栏 + 新建/我的会话，底部输入栏 + "提交匹配"（单端点），
  * 右侧"需求档案"悬浮摘要面板（可折叠），对话萃取 + 选项回填 + 三态档案 + 确认提交。
  */
-import { computed, h, nextTick, onMounted, ref, watch } from "vue"
+import { computed, nextTick, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { NButton, NInput, NModal, NPopconfirm, NTag, useMessage } from "naive-ui"
 
@@ -28,6 +28,10 @@ import OptionButtonGroup from "@/components/business/OptionButtonGroup.vue"
 
 const message = useMessage()
 const router = useRouter()
+
+// NModal 默认 teleport 到 body，脱离 .theme-b2b 作用域导致主题 CSS 变量不级联；
+// 挂到客户侧 theme 根内，使确认弹框正确应用 MASTER 语义 token。
+const modalTo = ".main-layout.theme-b2b"
 
 const messages = ref<{ role: "assistant" | "user"; content: string; error?: boolean; created_at?: string }[]>([])
 const options = ref<string[]>([])
@@ -102,6 +106,15 @@ function hasProductType(): boolean {
 function hasOtherDemandPoints(): boolean {
   return demandPoints.value.some((p) => p.key !== "product_type")
 }
+
+/** 可提交：已明确产品类型且已有品类外需求点（D12）。 */
+const canSubmit = computed<boolean>(() => hasProductType() && hasOtherDemandPoints())
+
+/** 提交门槛未达时的提示文案（替代裸置灰按钮，向用户说明下一步）。 */
+const submitHintText = computed<string>(() => {
+  if (!hasProductType()) return "请先明确要寻找的产品类型（如智能音箱、机顶盒）"
+  return "补充需求点（如操作系统、认证、起订量等）后即可提交匹配"
+})
 
 // 提交确认框（D7 两步化）：品类锚点 / 其余需求点 分组展示
 const anchorPoint = computed<DemandPoint | null>(() => editablePoints.value.find((p) => p.key === "product_type") ?? null)
@@ -312,6 +325,20 @@ function toggleStrictness(p: DemandPoint): void {
   p.strictness = p.strictness === "strict" ? "best-effort" : "strict"
 }
 
+/** 确认框 strictness 概览：共 N 项 · M 必须 · K 尽力。 */
+const strictCounts = computed(() => {
+  const pts = editablePoints.value
+  const strict = pts.filter((p) => p.strictness === "strict").length
+  return { total: pts.length, strict, best: pts.length - strict }
+})
+
+/** 批量设置其余需求点（非品类锚点）的 strictness。 */
+function setAllStrictness(strict: boolean): void {
+  otherPoints.value.forEach((p) => {
+    p.strictness = strict ? "strict" : "best-effort"
+  })
+}
+
 async function confirm(): Promise<void> {
   confirmOpen.value = false
   if (!conversationId.value) return
@@ -458,7 +485,7 @@ onMounted(() => {
                     size="small"
                     @close="removeAttachment(a.name)"
                   >
-                    📎 {{ a.name }}
+                    <svg class="chat-page__attach-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>{{ a.name }}
                   </NTag>
                 </div>
                 <NInput
@@ -502,8 +529,24 @@ onMounted(() => {
             <div v-show="!asideCollapsed" class="chat-page__aside-body">
               <DemandProfileCard :points="demandPoints" />
             </div>
-            <div v-if="hasProductType() && !asideCollapsed" class="chat-page__demand-footer">
-              <NButton type="primary" block :disabled="!hasOtherDemandPoints()" @click="openConfirm()">提交匹配 →</NButton>
+            <div v-if="!asideCollapsed" class="chat-page__demand-footer">
+              <NButton
+                v-if="canSubmit"
+                type="primary"
+                block
+                size="large"
+                class="chat-page__submit"
+                @click="openConfirm()"
+              >
+                <template #icon>
+                  <svg class="chat-page__submit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                </template>
+                提交匹配
+              </NButton>
+              <div v-else class="chat-page__demand-hint">
+                <svg class="chat-page__hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+                <span>{{ submitHintText }}</span>
+              </div>
             </div>
           </div>
 
@@ -559,10 +602,16 @@ onMounted(() => {
     </div>
 
     <!-- D7 两步化：提交确认框（需求档案清晰分层展示 + strictness 可微调） -->
-    <NModal v-model:show="confirmOpen" preset="card" title="确认提交匹配" style="width: 640px">
+    <NModal v-model:show="confirmOpen" preset="card" title="确认提交匹配" class="chat-confirm__modal" :to="modalTo" style="width: 640px">
       <p class="chat-confirm__hint">
         请核对下方需求档案，右侧可切换严格度：<em>必须</em>＝硬性要求、<em>尽力</em>＝倾向项。确认后开始匹配。
       </p>
+
+      <div class="chat-confirm__summary">
+        <span>共 <b>{{ strictCounts.total }}</b> 项</span>
+        <span class="chat-confirm__summary-strict">必须 {{ strictCounts.strict }}</span>
+        <span class="chat-confirm__summary-best">尽力 {{ strictCounts.best }}</span>
+      </div>
 
       <div v-if="!editablePoints.length" class="chat-confirm__empty">
         暂无可确认的需求点，请先在对话中补充。
@@ -595,6 +644,10 @@ onMounted(() => {
           <div class="chat-confirm__section-title">
             需求点
             <span class="chat-confirm__count">{{ otherPoints.length }}</span>
+            <span class="chat-confirm__batch">
+              <button type="button" class="chat-confirm__batch-btn" @click="setAllStrictness(true)">全部必须</button>
+              <button type="button" class="chat-confirm__batch-btn" @click="setAllStrictness(false)">全部尽力</button>
+            </span>
           </div>
           <div v-for="(p, i) in otherPoints" :key="i" class="chat-confirm__row">
             <div class="chat-confirm__label">{{ p.label }}</div>
@@ -675,11 +728,11 @@ onMounted(() => {
   cursor: pointer;
 }
 .chat-page__rail-item:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
 }
 .chat-page__rail-item.is-active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-bg);
+  border-color: var(--color-accent);
+  background: var(--color-accent-50);
 }
 .chat-page__rail-top {
   display: flex;
@@ -840,6 +893,30 @@ onMounted(() => {
   flex: none;
   padding-top: var(--space-12);
 }
+.chat-page__submit-icon {
+  width: 16px;
+  height: 16px;
+}
+/* 提交门槛未达：原因提示（替代裸置灰按钮） */
+.chat-page__demand-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-8);
+  background: var(--color-background);
+  font-size: var(--font-size-13);
+  line-height: var(--line-height-normal);
+  color: var(--color-muted-foreground);
+}
+.chat-page__hint-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--color-accent);
+}
 .chat-page__records-card.is-collapsed {
   flex: 0 0 auto;
 }
@@ -860,7 +937,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .chat-page__record:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
 }
 .chat-page__record-top {
   display: flex;
@@ -901,7 +978,7 @@ onMounted(() => {
 .chat-confirm__hint em {
   font-style: normal;
   font-weight: var(--font-weight-600);
-  color: var(--color-primary-text);
+  color: var(--color-accent);
 }
 .chat-confirm__empty {
   padding: var(--space-24) var(--space-16);
@@ -940,6 +1017,40 @@ onMounted(() => {
   font-weight: var(--font-weight-500);
   color: var(--color-text-secondary);
 }
+.chat-confirm__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin: 0 0 var(--space-16);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+.chat-confirm__summary b { font-weight: var(--font-weight-700); color: var(--color-text); }
+.chat-confirm__summary-strict { color: var(--color-warning-text); font-weight: var(--font-weight-700); }
+.chat-confirm__summary-best { color: var(--color-text-secondary); }
+.chat-confirm__batch {
+  margin-left: auto;
+  display: inline-flex;
+  gap: var(--space-4);
+}
+.chat-confirm__batch-btn {
+  padding: 2px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-standard);
+}
+.chat-confirm__batch-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.chat-confirm__batch-btn:focus-visible {
+  outline: 3px solid rgba(3, 105, 161, 0.45);
+  outline-offset: 2px;
+}
 .chat-confirm__row {
   display: flex;
   align-items: center;
@@ -955,8 +1066,8 @@ onMounted(() => {
 /* 品类锚点行：左侧主题色竖条高亮 */
 .chat-confirm__row--anchor {
   border-color: var(--color-border-strong);
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-primary-bg);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-accent-50);
 }
 .chat-confirm__label {
   flex: none;
@@ -981,5 +1092,23 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-8);
+}
+.chat-page__attach-icon {
+  width: 13px;
+  height: 13px;
+  margin-right: 2px;
+  vertical-align: -2px;
+}
+</style>
+
+<style>
+/* naive NModal 根元素由 naive 内部渲染、无 scoped data-v，需全局样式；
+   弹框经 :to 挂在 .theme-b2b 内，主题 CSS 变量可级联。 */
+.chat-confirm__modal {
+  border-radius: var(--radius-16) !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+.chat-confirm__modal .n-card-content {
+  padding: var(--space-xl) !important;
 }
 </style>

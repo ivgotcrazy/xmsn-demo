@@ -99,16 +99,16 @@ function onConfirm(): void {
 <style scoped>
 .opt-group {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 10px 0 6px 44px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0 0 var(--space-8) 48px;
   max-width: 560px;
 }
 .opt-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .opt-chip {
   display: inline-flex;
@@ -116,37 +116,36 @@ function onConfirm(): void {
   gap: 7px;
   padding: 7px 13px;
   border-radius: 10px;
-  border: 1px solid #dbe0ea;
-  background: #fff;
-  color: #3a4456;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-foreground);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--duration-fast) var(--ease-standard);
   user-select: none;
 }
 .opt-chip:hover {
-  border-color: #7fb0f5;
-  color: #2b7de9;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 .opt-chip.is-selected {
-  border-color: #2b7de9;
-  background: #eef4ff;
-  color: #1f5fd0;
+  border-color: var(--color-accent);
+  background: var(--color-accent-50);
+  color: var(--color-accent-700);
   font-weight: 600;
 }
-/* 动作按钮：胶囊 + 主题色 */
+/* action chips: pill + accent */
 .opt-chip--action {
-  border-radius: 999px;
-  background: #f2f6ff;
-  border-color: #dbe6ff;
-  color: #2b7de9;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-50);
+  border-color: var(--color-accent-100);
+  color: var(--color-accent-700);
   font-weight: 600;
 }
 .opt-chip--action:hover {
-  background: #e3edff;
-  border-color: #2b7de9;
+  background: var(--color-accent-100);
+  border-color: var(--color-accent);
 }
-/* 指示器：单选圆点 */
 .opt-indicator {
   flex: none;
   display: inline-flex;
@@ -157,20 +156,19 @@ function onConfirm(): void {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid #c3cddd;
+  border: 2px solid var(--color-border-strong);
   box-sizing: border-box;
 }
 .opt-chip--radio.is-selected .opt-indicator--dot {
-  border-color: #2b7de9;
-  background: #2b7de9;
-  box-shadow: inset 0 0 0 2px #eef4ff;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: inset 0 0 0 2px var(--color-accent-50);
 }
-/* 指示器：多选方框 + ✓ */
 .opt-indicator--box {
   width: 14px;
   height: 14px;
   border-radius: 4px;
-  border: 2px solid #c3cddd;
+  border: 2px solid var(--color-border-strong);
   box-sizing: border-box;
   color: #fff;
   font-size: 11px;
@@ -178,27 +176,18 @@ function onConfirm(): void {
   line-height: 1;
 }
 .opt-indicator--box.is-on {
-  background: #2b7de9;
-  border-color: #2b7de9;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 .opt-indicator--box.is-on::after {
-  content: "✓";
+  content: "\u2713";
 }
 .opt-label {
   white-space: nowrap;
 }
 .opt-confirm {
-  align-self: flex-start; /* 与选项左对齐、紧贴其下，避免"飞到右侧"脱离选项组 */
+  align-self: flex-start;
   margin-top: 2px;
   border-radius: 8px;
-}
-</style>
-
-<style scoped>
-.opt-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-8);
-  margin: 0 0 var(--space-8) 48px;
 }
 </style>

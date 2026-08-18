@@ -125,10 +125,11 @@ onMounted(() => {
           <span class="matches-page__list-count">共 {{ total }} 家</span>
         </div>
         <div class="matches-page__items">
-          <div v-for="it in items" :key="it.match_id" class="matches-page__item">
+          <div v-for="(it, i) in items" :key="it.match_id" class="matches-page__item">
             <MatchResultItem
               :item="it"
               :active="it.match_id === selectedId"
+              :rank="i + 1"
               @open="select(it.match_id)"
             />
           </div>

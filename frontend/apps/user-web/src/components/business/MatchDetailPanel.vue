@@ -22,6 +22,9 @@ const emit = defineEmits<{
   viewVendor: []
 }>()
 
+// 预览 NModal 挂到客户侧 theme 根内（避免 teleport 到 body 丢失主题 CSS 变量）
+const modalTo = ".main-layout.theme-b2b"
+
 const GROUP = [
   { key: "matched_params", title: "匹配项", type: "success" },
   { key: "partial_params", title: "部分匹配", type: "warning" },
@@ -38,6 +41,26 @@ const hitText = computed(() => {
     (props.detail?.missing_params?.length ?? 0) +
     (props.detail?.unmatched_params?.length ?? 0)
   return `参数命中 ${matched}/${total}`
+})
+
+/** 满足度总览（D10 四组命中率可视化）。 */
+const groupCounts = computed(() => {
+  const matched = props.detail?.matched_params?.length ?? 0
+  const partial = props.detail?.partial_params?.length ?? 0
+  const missing = props.detail?.missing_params?.length ?? 0
+  const unmatched = props.detail?.unmatched_params?.length ?? 0
+  const total = matched + partial + missing + unmatched || 1
+  return { matched, partial, missing, unmatched, total }
+})
+const stackSegs = computed(() => {
+  const g = groupCounts.value
+  const w = (n: number) => (n / g.total) * 100
+  return [
+    { key: "matched", cls: "is-matched", label: "匹配", count: g.matched, w: w(g.matched) },
+    { key: "partial", cls: "is-partial", label: "部分", count: g.partial, w: w(g.partial) },
+    { key: "missing", cls: "is-missing", label: "未声明", count: g.missing, w: w(g.missing) },
+    { key: "unmatched", cls: "is-unmatched", label: "不匹配", count: g.unmatched, w: w(g.unmatched) },
+  ].filter((s) => s.count > 0)
 })
 
 // 行内文档引用 → 全屏预览（打开真实源文件，非文本提取）
@@ -88,6 +111,25 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: string | nu
           匹配分 {{ item?.match_score ?? 0 }} · 语义相似度 {{ semanticPct }}% · {{ hitText }}
         </div>
 
+        <!-- 满足度总览（D10 四组命中率可视化） -->
+        <div v-if="groupCounts.total > 1" class="match-detail__satisfaction">
+          <div class="match-detail__stack">
+            <span
+              v-for="s in stackSegs"
+              :key="s.key"
+              class="match-detail__stack-seg"
+              :class="s.cls"
+              :style="{ width: s.w + '%' }"
+            />
+          </div>
+          <div class="match-detail__legend">
+            <span v-for="s in stackSegs" :key="s.key" class="match-detail__legend-item">
+              <i class="match-detail__dot" :class="s.cls" />
+              {{ s.label }} {{ s.count }}
+            </span>
+          </div>
+        </div>
+
         <section v-if="detail.match_reason" class="match-detail__comment">
           <h4>匹配理由</h4>
           <p>{{ detail.match_reason }}</p>
@@ -114,7 +156,7 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: string | nu
                 class="cite"
                 @click="openPreview(p.source_doc_id, p.source_page)"
               >
-                📄 第 {{ fmtPage(p.source_page) }} 页
+                <svg class="match-detail__cite-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>第 {{ fmtPage(p.source_page) }} 页
               </NButton>
             </li>
           </ul>
@@ -130,6 +172,7 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: string | nu
     <NModal
       v-model:show="previewOpen"
       preset="card"
+      :to="modalTo"
       :title="previewTitle"
       style="width: 94vw; max-width: 1400px; height: 92vh"
       @after-leave="revokePreview"
@@ -173,7 +216,7 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: string | nu
   font-size: var(--font-size-18);
 }
 .match-detail__vendor {
-  color: var(--color-primary);
+  color: var(--color-accent);
   font-size: var(--font-size-13);
   cursor: pointer;
   white-space: nowrap;
@@ -189,6 +232,33 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: string | nu
   color: var(--color-text-secondary);
   margin-bottom: var(--space-16);
 }
+.match-detail__satisfaction { margin-bottom: var(--space-16); }
+.match-detail__stack {
+  display: flex;
+  height: 8px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-bg);
+  margin-bottom: var(--space-8);
+}
+.match-detail__stack-seg { display: block; height: 100%; }
+.match-detail__stack-seg.is-matched { background: var(--color-success); }
+.match-detail__stack-seg.is-partial { background: var(--color-warning); }
+.match-detail__stack-seg.is-missing { background: var(--color-border-strong); }
+.match-detail__stack-seg.is-unmatched { background: var(--color-error); }
+.match-detail__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+.match-detail__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.match-detail__dot { width: 8px; height: 8px; border-radius: 2px; }
+.match-detail__dot.is-matched { background: var(--color-success); }
+.match-detail__dot.is-partial { background: var(--color-warning); }
+.match-detail__dot.is-missing { background: var(--color-border-strong); }
+.match-detail__dot.is-unmatched { background: var(--color-error); }
 .match-detail__group {
   margin-bottom: var(--space-16);
 }
@@ -243,14 +313,20 @@ async function openPreview(sourceDocId?: string | null, sourcePage?: string | nu
   margin: 0;
   line-height: var(--line-height-loose);
   color: var(--color-text);
-  background: var(--color-primary-bg);
-  border-left: 3px solid var(--color-primary);
+  background: var(--color-accent-50);
+  border-left: 3px solid var(--color-accent);
   padding: var(--space-12);
   border-radius: var(--radius-8);
 }
 .cite {
-  color: var(--color-primary);
+  color: var(--color-accent);
   white-space: nowrap;
+}
+.match-detail__cite-icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
 }
 .preview {
   max-width: 960px;

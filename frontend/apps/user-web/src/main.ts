@@ -5,6 +5,7 @@ import { createPinia } from "pinia"
 import { createApp } from "vue"
 
 import "@xmsn/tokens/tokens.css"
+import "@xmsn/tokens/tokens-b2b.css"
 
 import App from "./App.vue"
 import { router } from "./router"

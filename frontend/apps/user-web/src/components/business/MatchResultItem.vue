@@ -10,16 +10,25 @@ import type { MatchItem } from "@xmsn/api"
 defineProps<{
   item: MatchItem
   active?: boolean
+  rank?: number
 }>()
 const emit = defineEmits<{ open: [] }>()
 
 const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybrid: "混合" }
+
+/** 匹配分梯度：>=90 强匹配 / >=70 较匹配 / 其余 一般。 */
+function scoreTier(score: number): { label: string; cls: string } {
+  if (score >= 90) return { label: "强匹配", cls: "match-item__tier--strong" }
+  if (score >= 70) return { label: "较匹配", cls: "match-item__tier--mid" }
+  return { label: "一般", cls: "match-item__tier--low" }
+}
 </script>
 
 <template>
   <div class="match-item" :class="{ 'match-item--active': active }" @click="emit('open')">
     <div class="match-item__main">
       <div class="match-item__head">
+        <span v-if="rank" class="match-item__rank" :class="{ 'is-top': rank <= 3 }">{{ rank }}</span>
         <span class="match-item__name">{{ item.company_name }}</span>
         <NTag size="small" :bordered="false">{{ SOURCE_LABEL[item.match_source ?? "llm"] ?? item.match_source }}</NTag>
         <NTag v-if="(item.missing_count ?? 0) > 0" size="small" type="warning" :bordered="false">
@@ -28,6 +37,7 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
       </div>
       <div v-if="item.summary" class="match-item__summary">{{ item.summary }}</div>
       <div class="match-item__meta">
+        <span class="match-item__tier" :class="scoreTier(item.match_score).cls">{{ scoreTier(item.match_score).label }}</span>
         {{ item.location ?? "—" }} · 匹配 {{ item.matched_count ?? 0 }}/{{
           (item.matched_count ?? 0) +
           (item.partial_count ?? 0) +
@@ -56,10 +66,10 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
   transition: border-color var(--duration-fast) var(--ease-standard);
 }
 .match-item:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
 }
 .match-item--active {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
   box-shadow: var(--shadow-1);
 }
 .match-item__main {
@@ -99,6 +109,30 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.match-item__rank {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-700);
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+}
+.match-item__rank.is-top {
+  color: #fff;
+  background: var(--color-accent);
+}
+.match-item__tier {
+  font-weight: var(--font-weight-600);
+}
+.match-item__tier--strong { color: var(--color-success-text); }
+.match-item__tier--mid { color: var(--color-warning-text); }
+.match-item__tier--low { color: var(--color-text-secondary); }
 .match-item__score {
   flex: none;
   display: flex;
@@ -108,6 +142,6 @@ const SOURCE_LABEL: Record<string, string> = { llm: "LLM", rule: "规则", hybri
 }
 .match-item__arrow {
   font-size: var(--font-size-12);
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 </style>

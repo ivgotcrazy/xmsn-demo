@@ -80,8 +80,4 @@ function displayValue(v: string | string[]): string {
   line-height: var(--line-height-normal);
   padding-left: var(--space-4);
 }
-.demand-profile__conf {
-  font-size: var(--font-size-12);
-  color: var(--color-primary);
-}
 </style>

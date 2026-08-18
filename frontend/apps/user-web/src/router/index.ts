@@ -10,7 +10,12 @@ import { createRouter, createWebHistory } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
 
 const routes = [
-  { path: "/", redirect: "/customer/chat" },
+  {
+    path: "/",
+    name: "home",
+    component: () => import("@/views/public/HomeView.vue"),
+    meta: { title: "首页", public: true },
+  },
   {
     path: "/register",
     name: "register",
@@ -91,7 +96,7 @@ const routes = [
       },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: "/customer/chat" },
+  { path: "/:pathMatch(.*)*", redirect: "/" },
 ]
 
 export const router = createRouter({
