@@ -2,19 +2,23 @@
 /**
  * 认证页共享品牌区（B2B Service / MASTER.md Trust & Authority）：
  * 藏青背景 + 品牌 mark + 信任点（对话萃取 / 已审核厂商池 / 匹配可溯源）+ 徽章。
- * 用于登录 / 角色选择 / 厂商注册 / 采购方注册 等公共认证页（页面根需有 .theme-b2b）。
+ * 用于登录 / 角色选择 / 厂商注册 / 客户注册 等公共认证页（页面根需有 .theme-b2b）。
  */
 </script>
 
 <template>
   <aside class="auth-brand" aria-label="品牌介绍">
-    <div class="auth-brand__head">
+    <RouterLink class="auth-brand__back" to="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+      <span>返回首页</span>
+    </RouterLink>
+    <RouterLink class="auth-brand__head" to="/" aria-label="需脉枢纽 首页">
       <span class="auth-brand__mark" aria-hidden="true">需</span>
       <div>
         <h1 class="auth-brand__name">需脉枢纽</h1>
         <p class="auth-brand__tagline">B2B 代工制造 · AI 供需智能匹配</p>
       </div>
-    </div>
+    </RouterLink>
 
     <ul class="auth-brand__points">
       <li class="auth-brand__point">
@@ -44,7 +48,33 @@
   flex-direction: column;
   gap: 32px;
 }
-.auth-brand__head { display: flex; align-items: center; gap: 14px; }
+.auth-brand__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: -6px -10px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: color 200ms ease, background 200ms ease;
+}
+.auth-brand__back svg { width: 16px; height: 16px; }
+.auth-brand__back:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.auth-brand__back:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
+.auth-brand__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 200ms ease;
+}
+.auth-brand__head:hover { opacity: 0.88; }
+.auth-brand__head:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
 .auth-brand__mark {
   flex: none;
   width: 46px; height: 46px;

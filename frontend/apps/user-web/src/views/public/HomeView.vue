@@ -75,11 +75,11 @@ const stats = [
         <nav class="nav__links" aria-label="主导航">
           <a href="#how">如何工作</a>
           <a href="#product">产品特色</a>
-          <a href="#demo">智能音箱演示</a>
+          <a href="#demo">智能音箱实况</a>
         </nav>
         <div class="nav__actions">
           <template v-if="auth.isAuthenticated()">
-            <button class="btn btn--ghost" type="button" @click="router.push('/customer/chat')">进入工作台</button>
+            <button class="btn btn--ghost" type="button" @click="router.push(auth.user?.role === 'vendor' ? '/vendor/dashboard' : '/customer/chat')">进入工作台</button>
           </template>
           <template v-else>
             <button class="btn btn--ghost" type="button" @click="router.push('/login')">登录</button>
@@ -121,7 +121,7 @@ const stats = [
           <div class="chat-preview__head">
             <span class="chat-preview__dot" />
             <span>需脉 AI 选型助手</span>
-            <span class="chat-preview__live">演示</span>
+            <span class="chat-preview__live">实时</span>
           </div>
           <div class="chat-preview__body">
             <div class="msg msg--agent" :class="{ 'is-in': step >= 0 }">
@@ -158,7 +158,7 @@ const stats = [
     <!-- 数据证明（Proof） -->
     <section id="proof" class="proof">
       <div class="proof__inner">
-        <h2 class="section-title">不是演示片，是真实运行的结果</h2>
+        <h2 class="section-title">真实数据，真实运行的结果</h2>
         <p class="section-sub">厂商能力由 AI 从真实 PDF 解析、经人工审核，匹配全程可解释、可溯源。</p>
         <ul class="proof__grid">
           <li class="proof__item">
@@ -210,7 +210,7 @@ const stats = [
         <h2 class="section-title">为供需双方与管理者而设计</h2>
         <div class="product__grid">
           <article class="product__card">
-            <h3>面向客户（采购方）</h3>
+            <h3>面向客户</h3>
             <ul>
               <li>对话式需求描述，AI 主动引导补全</li>
               <li>秒级匹配 + 匹配分梯度对比</li>
@@ -243,7 +243,7 @@ const stats = [
     <!-- 智能音箱真实演示 -->
     <section id="demo" class="demo">
       <div class="demo__inner">
-        <h2 class="section-title">精选演示 · 智能音箱品类</h2>
+        <h2 class="section-title">智能音箱品类 · 真实匹配实况</h2>
         <p class="section-sub">以「智能音箱 / Android / 起订量 1000 台 / 交期 30 天」为例的真实匹配结果。</p>
         <ul class="demo__grid">
           <li v-for="v in demoVendors" :key="v.name" class="demo__card">
@@ -290,10 +290,10 @@ const stats = [
         <div class="footer__links">
           <a href="#how">如何工作</a>
           <a href="#product">产品特色</a>
-          <a href="#demo">智能音箱演示</a>
+          <a href="#demo">智能音箱实况</a>
           <a href="#top">返回顶部</a>
         </div>
-        <p class="footer__copy">© 2026 需脉枢纽 · 种子轮 PoC 演示</p>
+        <p class="footer__copy">© 2026 需脉枢纽</p>
       </div>
     </footer>
   </div>

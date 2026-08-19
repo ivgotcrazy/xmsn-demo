@@ -9,7 +9,9 @@ import { NSkeleton } from "naive-ui"
 import { vendorCapabilityVendorId, type CapabilityOut } from "@xmsn/api"
 
 import VendorCapabilityProfile from "@/components/business/VendorCapabilityProfile.vue"
+import { useAuthStore } from "@/stores/auth"
 
+const auth = useAuthStore()
 const cap = ref<CapabilityOut | null>(null)
 const loading = ref(true)
 
@@ -22,8 +24,11 @@ function fmtTime(iso?: string | null): string {
 }
 
 onMounted(async () => {
+  const vendorId = auth.user?.vendor_id
   try {
-    cap.value = await vendorCapabilityVendorId("v-001")
+    if (vendorId) {
+      cap.value = await vendorCapabilityVendorId(vendorId)
+    }
   } finally {
     loading.value = false
   }

@@ -49,13 +49,17 @@ async function submit(): Promise<void> {
       <div class="login__inner">
         <!-- 品牌区：信任与权威 -->
         <aside class="login__brand" aria-label="品牌介绍">
-          <div class="login__brand-head">
+          <RouterLink class="login__back" to="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+            <span>返回首页</span>
+          </RouterLink>
+          <RouterLink class="login__brand-head" to="/" aria-label="需脉枢纽 首页">
             <span class="login__brand-mark" aria-hidden="true">需</span>
             <div>
               <h1 class="login__brand-name">需脉枢纽</h1>
               <p class="login__brand-tagline">B2B 代工制造 · AI 供需智能匹配</p>
             </div>
-          </div>
+          </RouterLink>
 
           <ul class="login__points">
             <li class="login__point">
@@ -112,7 +116,7 @@ async function submit(): Promise<void> {
             </div>
           </div>
 
-          <p class="login__copyright">© 2026 需脉枢纽 · 种子轮 PoC 演示</p>
+          <p class="login__copyright">© 2026 需脉枢纽</p>
         </main>
       </div>
     </NConfigProvider>
@@ -159,7 +163,33 @@ async function submit(): Promise<void> {
   flex-direction: column;
   gap: 32px;
 }
-.login__brand-head { display: flex; align-items: center; gap: 14px; }
+.login__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: -6px -10px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: color 200ms ease, background 200ms ease;
+}
+.login__back svg { width: 16px; height: 16px; }
+.login__back:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.login__back:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
+.login__brand-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 200ms ease;
+}
+.login__brand-head:hover { opacity: 0.88; }
+.login__brand-head:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
 .login__brand-mark {
   flex: none;
   width: 46px; height: 46px;

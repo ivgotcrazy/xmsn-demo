@@ -4047,6 +4047,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "vendor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Id",
+            "description": "厂商角色关联的 vendor_id（非厂商或未完善企业信息时为 null）"
           }
         },
         "type": "object",

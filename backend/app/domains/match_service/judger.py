@@ -35,17 +35,6 @@ extended（自由需求点）判定：厂商 summary/soft_tags 提及才算 matc
 _cache: dict[str, list[dict]] = {}
 
 
-def _norm_slot(sv):
-    """兼容三态 dict({value,state}) / 纯值 / excluded 标记({excluded:True,value}) → (value, state)。"""
-    if isinstance(sv, dict):
-        if "state" in sv:
-            return sv.get("value"), sv.get("state")
-        if sv.get("excluded"):
-            return sv.get("value"), "excluded"
-        return sv, "set"
-    return sv, "set"
-
-
 def _judge_enum(d_val, s_val) -> str:
     """enum（多选）：需求值 ⊆ 厂商值 → matched；有交集 → partial；厂商未声明 → missing；无交集 → unmatched。"""
     if s_val in (None, [], ""):

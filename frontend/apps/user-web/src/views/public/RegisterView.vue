@@ -2,7 +2,7 @@
 /**
  * 00A 注册（B2B Service 重设计，对齐 design-system/xmsn/MASTER.md）
  * - 视觉：.theme-b2b 藏青 #0F172A + 蓝 CTA #0369A1 + Plus Jakarta Sans，与登录页同款分屏（Trust & Authority）。
- * - 纯角色选择页：我是厂商 → /vendor/register；我是采购方 → /customer/register。
+ * - 纯角色选择页：我是厂商 → /vendor/register；我是客户 → /customer/register。
  */
 import { useRouter } from "vue-router"
 
@@ -14,14 +14,17 @@ const router = useRouter()
     <div class="register__inner">
       <!-- 品牌区：信任与权威 -->
       <aside class="register__brand" aria-label="品牌介绍">
-        <div class="register__brand-head">
-          <span class="register__brand-mark" aria-hidden="true">需</span>
-          <div>
-            <h1 class="register__brand-name">需脉枢纽</h1>
-            <p class="register__brand-tagline">B2B 代工制造 · AI 供需智能匹配</p>
-          </div>
-        </div>
-
+          <RouterLink class="register__back" to="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+            <span>返回首页</span>
+          </RouterLink>
+          <RouterLink class="register__brand-head" to="/" aria-label="需脉枢纽 首页">
+            <span class="register__brand-mark" aria-hidden="true">需</span>
+            <div>
+              <h1 class="register__brand-name">需脉枢纽</h1>
+              <p class="register__brand-tagline">B2B 代工制造 · AI 供需智能匹配</p>
+            </div>
+          </RouterLink>
         <ul class="register__points">
           <li class="register__point">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
@@ -64,7 +67,7 @@ const router = useRouter()
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
             </span>
             <span class="register__role-body">
-              <b>我是采购方</b>
+              <b>我是客户</b>
               <span>对话描述需求，匹配已审核代工厂</span>
             </span>
             <span class="register__role-arrow" aria-hidden="true">
@@ -122,7 +125,33 @@ const router = useRouter()
   flex-direction: column;
   gap: 32px;
 }
-.register__brand-head { display: flex; align-items: center; gap: 14px; }
+.register__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: -6px -10px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: color 200ms ease, background 200ms ease;
+}
+.register__back svg { width: 16px; height: 16px; }
+.register__back:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.register__back:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
+.register__brand-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 200ms ease;
+}
+.register__brand-head:hover { opacity: 0.88; }
+.register__brand-head:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
 .register__brand-mark {
   flex: none;
   width: 46px; height: 46px;

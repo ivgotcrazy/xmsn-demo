@@ -425,6 +425,7 @@ export type UserOut = {
   role: string;
   status?: string;
   created_at: string;
+  vendor_id?: (string | null);
 };
 export type ValidationError = {
   loc: (string | number)[];

@@ -10,9 +10,11 @@ import { NButton, NDataTable, NTag, NUpload, useMessage, type UploadFileInfo } f
 import { vendorCapabilityVendorIdDocumentsDocumentId } from "@xmsn/api"
 
 import { uploadCapability } from "@/api/upload"
+import { useAuthStore } from "@/stores/auth"
 
 const router = useRouter()
 const message = useMessage()
+const auth = useAuthStore()
 
 type DocStatus = "parsing" | "done" | "failed"
 
@@ -39,6 +41,11 @@ function fmtTime(): string {
 async function handleUpload(data: { fileList: UploadFileInfo[] }): Promise<void> {
   const file = data.fileList[data.fileList.length - 1]
   if (!file?.file) return
+  const vendorId = auth.user?.vendor_id
+  if (!vendorId) {
+    message.warning("请先完善企业基本信息")
+    return
+  }
   // reactive 创建行：入表后仍保持响应性，后续 status 变更可驱动表格重渲染
   const row = reactive<DocRow>({
     name: file.file.name,
@@ -48,7 +55,7 @@ async function handleUpload(data: { fileList: UploadFileInfo[] }): Promise<void>
   })
   rows.value = [row, ...rows.value]
   try {
-    await uploadCapability({ vendorId: "v-001", files: [file.file] })
+    await uploadCapability({ vendorId, files: [file.file] })
     row.status = "done"
     message.success(`${file.file.name} 解析完成`)
   } catch {
@@ -66,8 +73,13 @@ function retry(row: DocRow): void {
 }
 
 async function handleDelete(row: DocRow): Promise<void> {
+  const vendorId = auth.user?.vendor_id
+  if (!vendorId) {
+    message.warning("请先完善企业基本信息")
+    return
+  }
   try {
-    await vendorCapabilityVendorIdDocumentsDocumentId("v-001", row.name)
+    await vendorCapabilityVendorIdDocumentsDocumentId(vendorId, row.name)
     rows.value = rows.value.filter((r) => r !== row)
     message.success(`已删除 ${row.name}，能力档案已重新生成`)
   } catch {

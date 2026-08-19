@@ -44,7 +44,7 @@ const routes = [
     path: "/customer/register",
     name: "customer-register",
     component: () => import("@/views/public/CustomerRegisterView.vue"),
-    meta: { title: "采购方注册", public: true },
+    meta: { title: "客户注册", public: true },
   },
   {
     path: "/vendor",

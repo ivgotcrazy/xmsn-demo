@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
-from app.db.models import User
+from app.db.models import User, Vendor
 from app.schemas.auth import AuthToken, LoginRequest, RegisterRequest, SendCodeRequest, UserOut
 from app.schemas.common import err_400, err_401
 
@@ -25,8 +25,14 @@ _verify_codes: dict[str, tuple[str, datetime]] = {}
 _CODE_TTL = timedelta(minutes=5)
 
 
-def user_out(u: User) -> UserOut:
-    """User ORM → UserOut（契约形状）。"""
+async def user_out(db: AsyncSession, u: User) -> UserOut:
+    """User ORM → UserOut（契约形状；厂商附带其 vendor_id，未完善企业信息时为 None）。"""
+    vendor_id: str | None = None
+    if u.role == "vendor":
+        res = await db.execute(select(Vendor.vendor_id).where(Vendor.user_id == u.user_id))
+        vid = res.scalar_one_or_none()
+        if vid is not None:
+            vendor_id = str(vid)
     return UserOut(
         user_id=str(u.user_id),
         phone=u.phone,
@@ -34,14 +40,15 @@ def user_out(u: User) -> UserOut:
         role=u.role,
         status=u.status,
         created_at=u.created_at,
+        vendor_id=vendor_id,
     )
 
 
-def _token(u: User) -> AuthToken:
+async def _token(db: AsyncSession, u: User) -> AuthToken:
     return AuthToken(
         access_token=create_access_token(str(u.user_id), u.role),
         expires_in=settings.jwt_expire_minutes * 60,
-        user=user_out(u),
+        user=await user_out(db, u),
     )
 
 
@@ -83,7 +90,7 @@ async def register(db: AsyncSession, payload: RegisterRequest) -> AuthToken:
     await db.commit()
     await db.refresh(user)
     logger.info("user registered: id=%s role=%s", user.user_id, user.role)
-    return _token(user)
+    return await _token(db, user)
 
 
 async def login(db: AsyncSession, payload: LoginRequest) -> AuthToken:
@@ -100,7 +107,7 @@ async def login(db: AsyncSession, payload: LoginRequest) -> AuthToken:
         db.add(AdminLog(admin_user_id=user.user_id, action="login",
                         target_type="admin", target_id=str(user.user_id), detail={"phone": user.phone}))
         await db.commit()
-    return _token(user)
+    return await _token(db, user)
 
 
 async def send_code(payload: SendCodeRequest) -> dict:

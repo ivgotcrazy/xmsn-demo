@@ -88,7 +88,11 @@ async function select(matchId: string): Promise<void> {
 
 /** 查看厂商能力 → 跳转客户端厂商能力页（返回回匹配结果页）。 */
 function viewVendor(): void {
-  const vendorId = selectedItem.value?.vendor_id ?? detail.value?.vendor_id ?? "v-001"
+  const vendorId = selectedItem.value?.vendor_id ?? detail.value?.vendor_id
+  if (!vendorId) {
+    message.error("厂商信息缺失")
+    return
+  }
   void router.push(`/customer/vendor/${vendorId}`)
 }
 

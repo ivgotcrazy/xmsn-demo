@@ -4,13 +4,17 @@
  */
 import { computed, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { NButton, NCard, NSpin, NTag } from "naive-ui"
+import { NButton, NCard, NSpin, NTag, useMessage } from "naive-ui"
 
 import { vendorCapabilityVendorId, vendorVendorId, type CapabilityOut, type VendorOut } from "@xmsn/api"
 
 import { AUDIT_META, type AuditStatus } from "@xmsn/types"
 
+import { useAuthStore } from "@/stores/auth"
+
 const router = useRouter()
+const message = useMessage()
+const auth = useAuthStore()
 const vendor = ref<VendorOut | null>(null)
 const cap = ref<CapabilityOut | null>(null)
 const loading = ref(true)
@@ -18,13 +22,20 @@ const auditMeta = computed(() => AUDIT_META[(vendor.value?.audit_status ?? "pend
 const capabilityCount = computed(() => (cap.value ? 1 : 0))
 
 onMounted(async () => {
+  const vendorId = auth.user?.vendor_id
+  if (!vendorId) {
+    loading.value = false
+    return
+  }
   try {
     const [v, c] = await Promise.all([
-      vendorVendorId("v-001"),
-      vendorCapabilityVendorId("v-001"),
+      vendorVendorId(vendorId),
+      vendorCapabilityVendorId(vendorId),
     ])
     vendor.value = v
     cap.value = c
+  } catch {
+    message.error("加载厂商信息失败")
   } finally {
     loading.value = false
   }
@@ -33,7 +44,8 @@ onMounted(async () => {
 
 <template>
   <NSpin :show="loading">
-    <div class="dashboard" v-if="vendor">
+    <div class="dashboard">
+      <template v-if="vendor">
       <div class="dashboard__head">
         <div>
           <h2>{{ vendor.company_name }}</h2>
@@ -70,6 +82,13 @@ onMounted(async () => {
           <p>查看已生成的能力档案（只读，不可编辑）。</p>
           <NButton @click="router.push('/vendor/profile')">查看档案</NButton>
         </NCard>
+      </div>
+      </template>
+      <!-- 厂商账号已建但未填企业资料（无 vendor_id） -->
+      <div v-else class="dashboard__empty">
+        <h3>未完善资料</h3>
+        <p>您还未录入企业基本信息与制造能力，完善并通过审核后进入匹配池。</p>
+        <NButton type="primary" @click="router.push('/vendor/register/company')">去完善企业信息</NButton>
       </div>
     </div>
   </NSpin>

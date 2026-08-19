@@ -16,7 +16,7 @@ const auth = useAuthStore()
 
 function logout(): void {
   auth.logout()
-  void router.push("/login")
+  void router.push("/")
 }
 </script>
 
@@ -24,10 +24,10 @@ function logout(): void {
   <div class="main-layout theme-b2b">
     <NConfigProvider :theme-overrides="themeB2bOverrides">
       <header class="main-layout__nav">
-        <div class="main-layout__brand" @click="router.push('/customer/chat')">
+        <RouterLink class="main-layout__brand" to="/" aria-label="需脉枢纽 首页">
           <span class="main-layout__mark" aria-hidden="true">需</span>
           <span>需脉枢纽</span>
-        </div>
+        </RouterLink>
         <div class="main-layout__spacer" />
         <div class="main-layout__user">
           <span class="main-layout__who">
@@ -75,9 +75,13 @@ function logout(): void {
   font-size: 18px;
   font-weight: 700;
   color: var(--color-primary);
+  text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
+  transition: opacity 200ms ease;
 }
+.main-layout__brand:hover { opacity: 0.85; }
+.main-layout__brand:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.45); outline-offset: 2px; }
 .main-layout__mark {
   display: inline-flex;
   align-items: center;

@@ -36,6 +36,7 @@ class UserOut(BaseModel):
     role: str
     status: str = "active"
     created_at: datetime
+    vendor_id: str | None = Field(default=None, description="厂商角色关联的 vendor_id（非厂商或未完善企业信息时为 null）")
 
 
 class AuthToken(BaseModel):

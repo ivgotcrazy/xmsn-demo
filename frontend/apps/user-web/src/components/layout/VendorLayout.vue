@@ -24,14 +24,14 @@ function go(key: string): void {
 
 function logout(): void {
   auth.logout()
-  void router.push("/login")
+  void router.push("/")
 }
 </script>
 
 <template>
   <div class="vendor-layout">
     <aside class="vendor-layout__side">
-      <div class="vendor-layout__logo" @click="router.push('/vendor/dashboard')">需脉枢纽</div>
+      <RouterLink class="vendor-layout__logo" to="/" aria-label="需脉枢纽 首页">需脉枢纽</RouterLink>
       <nav class="vendor-layout__nav">
         <div
           v-for="m in menus"
@@ -74,12 +74,17 @@ function logout(): void {
   padding: var(--space-16) 0;
 }
 .vendor-layout__logo {
+  display: block;
   padding: 0 var(--space-24) var(--space-32);
   font-size: var(--font-size-18);
   font-weight: var(--font-weight-700);
   color: #fff;
+  text-decoration: none;
   cursor: pointer;
+  transition: opacity 200ms ease;
 }
+.vendor-layout__logo:hover { opacity: 0.85; }
+.vendor-layout__logo:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.6); outline-offset: 2px; }
 .vendor-layout__nav {
   display: flex;
   flex-direction: column;

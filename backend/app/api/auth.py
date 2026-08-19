@@ -41,4 +41,4 @@ async def me(user: CurrentUser, db: Db) -> ApiResponse[UserOut]:
     u = res.scalar_one_or_none()
     if not u:
         raise err_404("用户不存在")
-    return ApiResponse(data=auth_service.user_out(u))
+    return ApiResponse(data=await auth_service.user_out(db, u))

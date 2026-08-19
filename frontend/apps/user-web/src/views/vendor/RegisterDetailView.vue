@@ -63,6 +63,9 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="register-detail">
+    <div class="register-detail__back">
+      <NButton text size="small" @click="router.push('/vendor/register')">← 返回上一步</NButton>
+    </div>
     <h2>企业基本信息</h2>
     <NForm label-placement="top" class="register-detail__form">
       <NFormItem label="企业名称" required>
@@ -107,6 +110,16 @@ async function submit(): Promise<void> {
 .register-detail h2 {
   margin: 0 0 var(--space-24);
   font-size: var(--font-size-18);
+}
+.register-detail__back {
+  display: flex;
+  margin-bottom: var(--space-16);
+}
+.register-detail__back .n-button {
+  color: var(--color-text-secondary);
+}
+.register-detail__back .n-button:hover {
+  color: var(--color-accent);
 }
 .register-detail__row {
   display: grid;

@@ -23,6 +23,12 @@ const vendor = ref<VendorOut | null>(null)
 const cap = ref<CapabilityOut | null>(null)
 const loading = ref(true)
 
+/** 返回：正常导航回匹配结果页；深链/刷新无历史时回落会话页，避免死路。 */
+function goBack(): void {
+  if (window.history.length > 1) router.back()
+  else void router.push("/customer/chat")
+}
+
 const TAG_LABEL: Record<string, string> = {
   product_types: "产品类型",
   process_types: "工艺",
@@ -70,8 +76,13 @@ async function openDoc(doc: DocRef): Promise<void> {
 }
 
 onMounted(async () => {
+  const vendorId = route.params.vendorId as string
+  if (!vendorId) {
+    loading.value = false
+    message.error("厂商信息缺失")
+    return
+  }
   try {
-    const vendorId = (route.params.vendorId as string) || "v-001"
     const [v, c] = await Promise.all([vendorVendorId(vendorId), vendorCapabilityVendorId(vendorId)])
     vendor.value = v
     cap.value = c
@@ -86,7 +97,7 @@ onMounted(async () => {
 <template>
   <div class="vendor-page">
     <header class="vendor-page__head">
-      <NButton text size="small" @click="router.back()">← 返回</NButton>
+      <NButton text size="small" @click="goBack()">← 返回</NButton>
       <h2>厂商能力</h2>
     </header>
 

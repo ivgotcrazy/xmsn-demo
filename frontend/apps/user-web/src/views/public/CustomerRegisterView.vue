@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 客户注册（B2B Service 重设计，对齐 MASTER.md）：
- * 00A 选「我是采购方」→ 注册表单（分屏式 theme-b2b）→ 直接进入 02A 自动登录。
+ * 00A 选「我是客户」→ 注册表单（分屏式 theme-b2b）→ 直接进入 02A 自动登录。
  * 逻辑不变：注册成功 → /customer/chat。
  */
 import { ref } from "vue"
@@ -67,7 +67,11 @@ async function submit(): Promise<void> {
 
         <main class="auth-reg__panel">
           <div class="auth-reg__card">
-            <h2 class="auth-reg__title">采购方注册</h2>
+            <router-link class="auth-reg__back" to="/register">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+              返回角色选择
+            </router-link>
+            <h2 class="auth-reg__title">客户注册</h2>
             <p class="auth-reg__sub">注册后直接进入需求对话</p>
 
             <NForm class="auth-reg__form" label-placement="top">
@@ -117,7 +121,7 @@ async function submit(): Promise<void> {
             </div>
           </div>
 
-          <p class="auth-reg__copyright">© 2026 需脉枢纽 · 种子轮 PoC 演示</p>
+          <p class="auth-reg__copyright">© 2026 需脉枢纽</p>
         </main>
       </div>
     </NConfigProvider>
@@ -158,6 +162,20 @@ async function submit(): Promise<void> {
   flex-direction: column;
   justify-content: center;
 }
+.auth-reg__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+.auth-reg__back svg { width: 16px; height: 16px; }
+.auth-reg__back:hover { text-decoration: underline; }
+.auth-reg__back:focus-visible { outline: 3px solid rgba(3, 105, 161, 0.45); outline-offset: 2px; }
 .auth-reg__title { font-size: 28px; font-weight: 800; color: var(--color-primary); }
 .auth-reg__sub { margin-top: 8px; font-size: 15px; color: var(--color-muted-foreground); }
 .auth-reg__form { margin-top: 24px; }
