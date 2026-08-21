@@ -4,6 +4,7 @@
  */
 
 const TOKEN_KEY = "xmsn_token"
+const GUEST_TOKEN_KEY = "xmsn_guest_token"
 
 /** 统一响应信封（架构 5.3）：{ code, message, data }，code != 0 为业务/系统错误。 */
 interface Envelope<T> {
@@ -13,13 +14,27 @@ interface Envelope<T> {
 }
 
 export function getToken(): string | null {
-  return typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null
+  if (typeof localStorage === "undefined") return null
+  // 真实登录 token 优先；否则回退到游客会话 token（sessionStorage）
+  return localStorage.getItem(TOKEN_KEY) ?? getGuestToken()
 }
 
 export function setToken(token: string | null): void {
   if (typeof localStorage === "undefined") return
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else localStorage.removeItem(TOKEN_KEY)
+}
+
+/** 游客会话 token（sessionStorage）：关标签页/窗口即失效，符合「退出聊天后不可保存」。 */
+export function getGuestToken(): string | null {
+  if (typeof sessionStorage === "undefined") return null
+  return sessionStorage.getItem(GUEST_TOKEN_KEY)
+}
+
+export function setGuestToken(token: string | null): void {
+  if (typeof sessionStorage === "undefined") return
+  if (token) sessionStorage.setItem(GUEST_TOKEN_KEY, token)
+  else sessionStorage.removeItem(GUEST_TOKEN_KEY)
 }
 
 export interface RequestOptions {

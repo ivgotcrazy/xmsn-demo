@@ -150,6 +150,11 @@ activemq-data/
 # Environments
 .env
 .envrc
+
+# xmsn 远程部署（deploy_remote.py 敏感配置与运行时产物）
+infra/deploy_remote.ini
+infra/backups/
+infra/.tmp/
 .venv
 env/
 venv/

@@ -98,7 +98,14 @@ class Conversation(Base):
         CheckConstraint("status IN ('active','confirmed','closed')", name="ck_conversations_status"),
     )
     conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id"))
+    # 归属：真实用户 user_id 非空；游客（匿名体验）user_id 为空 + is_anonymous + guest_session_id
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True
+    )
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    guest_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(20), default="active")
     # 会话标题（一会话一产品）：聚焦的产品类型名，未确定时为「新会话」
     title: Mapped[str] = mapped_column(String(100), default="新会话")
@@ -118,7 +125,9 @@ class CustomerRequest(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.conversation_id")
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id"))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True
+    )
     version: Mapped[int] = mapped_column(Integer, default=1)
     structured_demand: Mapped[dict] = mapped_column(JSONB, default=dict)
     embedding_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

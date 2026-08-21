@@ -44,3 +44,11 @@ class AuthToken(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserOut
+
+
+class GuestToken(BaseModel):
+    """游客会话 Token（匿名体验）：无账号、无 user，仅用于未登录体验对话与匹配。"""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int

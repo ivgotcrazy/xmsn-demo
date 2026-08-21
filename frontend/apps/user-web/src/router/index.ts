@@ -104,10 +104,23 @@ export const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   document.title = `${(to.meta.title as string) ?? "需脉枢纽"} · 需脉枢纽`
   const auth = useAuthStore()
+  // 游客禁止进入厂商后台（/vendor 下除注册外的鉴权路由）
+  if (auth.isGuest() && to.meta.requiresAuth && to.path.startsWith("/vendor")) {
+    return { path: "/login" }
+  }
   if (to.meta.requiresAuth && !auth.isAuthenticated()) {
+    // 客户侧路由：未登录自动进入游客模式（开放匿名体验，不保存会话/结果）
+    if (to.path.startsWith("/customer")) {
+      try {
+        await auth.enterGuestMode()
+        return true
+      } catch {
+        return { path: "/login", query: { redirect: to.fullPath } }
+      }
+    }
     return { path: "/login", query: { redirect: to.fullPath } }
   }
   return true

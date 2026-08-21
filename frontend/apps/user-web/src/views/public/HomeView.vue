@@ -14,37 +14,93 @@ import { useAuthStore } from "@/stores/auth"
 const router = useRouter()
 const auth = useAuthStore()
 
-/** 聊天入口：已登录直达对话页，未登录先登录（登录后回跳）。 */
-function chatEntry(): void {
-  router.push(auth.isAuthenticated() ? "/customer/chat" : "/login?redirect=/customer/chat")
+/** 聊天入口：已登录直达对话页；未登录进入游客模式体验（匿名不保存，可随时注册）。 */
+async function chatEntry(): Promise<void> {
+  if (auth.isAuthenticated()) {
+    router.push("/customer/chat")
+    return
+  }
+  try {
+    await auth.enterGuestMode()
+    router.push("/customer/chat")
+  } catch {
+    router.push("/login?redirect=/customer/chat")
+  }
 }
+/** 厂商入驻：面向新厂商，直达厂商注册页（public，无需登录）。 */
 function vendorEntry(): void {
-  router.push(auth.isAuthenticated() ? "/vendor/dashboard" : "/login?redirect=/vendor/dashboard")
+  router.push("/vendor/register")
 }
 
-// ---------- Hero 聊天预览动效（步骤状态机，尊重 prefers-reduced-motion） ----------
+// ---------- Hero 聊天预览动效（自动循环；hover 暂停；尊重 prefers-reduced-motion） ----------
 const CHAT_STEPS = 6
 const step = ref(0)
 let timer: number | undefined
+let paused = false
+
+/** 小屏（<768px）直接展示静态终态，不做逐帧播放，避免 Hero 过长与动效抖动 */
+function isSmallScreen(): boolean {
+  return typeof window !== "undefined" && window.innerWidth <= 768
+}
 
 function prefersReduced(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
 }
 
+function clearLoop() {
+  if (timer !== undefined) {
+    window.clearInterval(timer)
+    timer = undefined
+  }
+}
+
+/** 自动重播：0 → 终态 → 回到 0 循环 */
+function advance() {
+  if (paused) return
+  step.value = (step.value + 1) % CHAT_STEPS
+}
+
+/** 开始自动播放（移动端 / reduced-motion 展示静态终态） */
 function play() {
-  if (prefersReduced()) {
+  if (prefersReduced() || isSmallScreen()) {
     step.value = CHAT_STEPS - 1 // 静态展示最终态
     return
   }
   step.value = 0
-  timer = window.setInterval(() => {
-    step.value = (step.value + 1) % CHAT_STEPS
-  }, 1600)
+  paused = false
+  clearLoop()
+  timer = window.setInterval(advance, 1600)
 }
 
-onMounted(play)
+/** hover/聚焦 暂停 */
+function pause() {
+  paused = true
+  clearLoop()
+}
+
+/** 移出/失焦 恢复播放 */
+function resume() {
+  if (paused) {
+    paused = false
+    clearLoop()
+    timer = window.setInterval(advance, 1600)
+  }
+}
+
+// ---------- 导航滚动阴影 ----------
+const scrolled = ref(false)
+function onScroll() {
+  scrolled.value = (typeof window !== "undefined" ? window.scrollY : 0) > 8
+}
+
+onMounted(() => {
+  play()
+  onScroll()
+  window.addEventListener("scroll", onScroll, { passive: true })
+})
 onUnmounted(() => {
-  if (timer !== undefined) window.clearInterval(timer)
+  clearLoop()
+  window.removeEventListener("scroll", onScroll)
 })
 
 // ---------- 真实演示数据（智能音箱品类，取自实际匹配运行） ----------
@@ -52,21 +108,19 @@ const demoVendors = [
   { name: "深圳市声域智能科技有限公司", score: 100, os: "Android + RTOS", cert: "CE · FCC · SRRC", moq: 1000, lead: 30, loc: "广东深圳" },
   { name: "广州市云雀智能科技有限公司", score: 100, os: "Android", cert: "—", moq: 1000, lead: 25, loc: "广东广州" },
   { name: "中山市天籁智能电器有限公司", score: 88, os: "Android", cert: "CE · FCC · SRRC", moq: 1500, lead: 28, loc: "广东中山" },
-  { name: "青岛市浪声智能设备有限公司", score: 75, os: "RTOS", cert: "CE · FCC", moq: 500, lead: 25, loc: "山东青岛" },
 ]
 
 const stats = [
-  { value: "10", label: "已入驻智能音箱厂商" },
-  { value: "10", label: "真实 PDF 能力文档" },
-  { value: "100", label: "Top 匹配分" },
-  { value: "<1s", label: "单次匹配计算" },
+  { value: "已审核厂商池", label: "入驻需经审核" },
+  { value: "秒级匹配", label: "对话即出结果" },
+  { value: "全程可溯源", label: "每项有原文出处" },
 ]
 </script>
 
 <template>
   <div class="home theme-b2b">
     <!-- 导航 -->
-    <header class="nav">
+    <header class="nav" :class="{ 'is-scrolled': scrolled }">
       <div class="nav__inner">
         <a class="nav__brand" href="#top" aria-label="需脉枢纽 首页">
           <span class="nav__logo">需</span>
@@ -75,7 +129,7 @@ const stats = [
         <nav class="nav__links" aria-label="主导航">
           <a href="#how">如何工作</a>
           <a href="#product">产品特色</a>
-          <a href="#demo">智能音箱实况</a>
+          <a href="#demo">真实匹配演示</a>
         </nav>
         <div class="nav__actions">
           <template v-if="auth.isAuthenticated()">
@@ -99,8 +153,8 @@ const stats = [
           <span class="eyebrow">B2B 代工制造 · AI 供需智能匹配</span>
           <h1 class="hero__title">描述需求，<span class="hero__accent">对话即匹配</span></h1>
           <p class="hero__lead">
-            需脉枢纽用 AI 对话萃取你的代工需求，智能匹配已审核代工厂，
-            并给出可解释的匹配理由、风险提示与「原文溯源」——不靠猜，每一项都有出处。
+            需脉枢纽以 AI 对话理解你的代工需求，在已审核的代工厂中智能匹配，
+            并为每一条匹配结果给出理由、风险提示与原文出处——不凭感觉，每项结论都有据可查。
           </p>
           <div class="hero__cta">
             <button class="btn btn--primary btn--lg" type="button" @click="chatEntry">
@@ -117,66 +171,48 @@ const stats = [
         </div>
 
         <!-- 聊天预览动效 -->
-        <div class="chat-preview" aria-hidden="true">
-          <div class="chat-preview__head">
-            <span class="chat-preview__dot" />
-            <span>需脉 AI 选型助手</span>
-            <span class="chat-preview__live">实时</span>
-          </div>
-          <div class="chat-preview__body">
-            <div class="msg msg--agent" :class="{ 'is-in': step >= 0 }">
-              <span class="msg__who">需</span>
-              <p>您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？</p>
+        <div class="hero__demo">
+          <div
+            class="chat-preview"
+            aria-hidden="true"
+            @mouseenter="pause"
+            @mouseleave="resume"
+          >
+            <div class="chat-preview__head">
+              <span class="chat-preview__dot" />
+              <span>需脉 AI 选型助手</span>
+              <span class="chat-preview__live">实时</span>
             </div>
-            <div class="chips" :class="{ 'is-in': step >= 1 }">
-              <span class="chip">机顶盒</span>
-              <span class="chip chip--active">智能音箱</span>
-              <span class="chip">IoT 设备</span>
-            </div>
-            <div class="msg msg--user" :class="{ 'is-in': step >= 2 }">
-              <p>我需要智能音箱，Android 系统，起订量 1000 台，交期 30 天</p>
-            </div>
-            <div class="msg msg--agent" :class="{ 'is-in': step >= 3 }">
-              <span class="msg__who">需</span>
-              <p class="typing"><span /><span /><span /></p>
-            </div>
-            <div class="msg msg--agent" :class="{ 'is-in': step >= 4 }">
-              <span class="msg__who">需</span>
-              <p>已记录：产品类型 智能音箱 · 操作系统 Android · 起订量 1000 · 交期 30 天</p>
-            </div>
-            <div class="result" :class="{ 'is-in': step >= 5 }">
-              <div class="result__row"><span>深圳市声域智能科技有限公司</span><b>100</b></div>
-              <div class="result__row"><span>广州市云雀智能科技有限公司</span><b>100</b></div>
-              <div class="result__row"><span>中山市天籁智能电器有限公司</span><b>88</b></div>
-              <div class="result__cite"><svg class="result__doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>第 1 页 · 原文溯源</div>
+            <div class="chat-preview__body">
+              <div class="msg msg--agent" :class="{ 'is-in': step >= 0 }">
+                <span class="msg__who">需</span>
+                <p>您好！我是需脉AI选型助手。请告诉我您需要找什么类型的代工厂？</p>
+              </div>
+              <div class="chips" :class="{ 'is-in': step >= 1 }">
+                <span class="chip">机顶盒</span>
+                <span class="chip chip--active">智能音箱</span>
+                <span class="chip">IoT 设备</span>
+              </div>
+              <div class="msg msg--user" :class="{ 'is-in': step >= 2 }">
+                <p>我需要智能音箱，Android 系统，起订量 1000 台，交期 30 天</p>
+              </div>
+              <div class="msg msg--agent" :class="{ 'is-in': step >= 3 }">
+                <span class="msg__who">需</span>
+                <p class="typing"><span /><span /><span /></p>
+              </div>
+              <div class="msg msg--agent" :class="{ 'is-in': step >= 4 }">
+                <span class="msg__who">需</span>
+                <p>已为你整理需求：智能音箱 · Android 系统 · 起订量 1000 台 · 交期 30 天</p>
+              </div>
+              <div class="result" :class="{ 'is-in': step >= 5 }">
+                <div class="result__row"><span>深圳市声域智能科技有限公司</span><b>100</b></div>
+                <div class="result__row"><span>广州市云雀智能科技有限公司</span><b>100</b></div>
+                <div class="result__row"><span>中山市天籁智能电器有限公司</span><b>88</b></div>
+                <div class="result__cite"><svg class="result__doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>来源：能力档案 · 原文溯源</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- 数据证明（Proof） -->
-    <section id="proof" class="proof">
-      <div class="proof__inner">
-        <h2 class="section-title">真实数据，真实运行的结果</h2>
-        <p class="section-sub">厂商能力由 AI 从真实 PDF 解析、经人工审核，匹配全程可解释、可溯源。</p>
-        <ul class="proof__grid">
-          <li class="proof__item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-            <h3>AI 解析 + 人工审核</h3>
-            <p>厂商上传能力文档，AI 提取结构化能力档案，审核通过后才进入匹配池。</p>
-          </li>
-          <li class="proof__item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10M18 20V4M6 20v-4" /></svg>
-            <h3>双通道匹配</h3>
-            <p>规则参数判定 + 语义召回双通道打分，兼顾硬指标与自然语言意图。</p>
-          </li>
-          <li class="proof__item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 15l2 2 4-4" /></svg>
-            <h3>出处可溯源</h3>
-            <p>每条匹配判定都能打开厂商原始文档「PDF 第 N 页」核对，不凭感觉。</p>
-          </li>
-        </ul>
       </div>
     </section>
 
@@ -188,26 +224,51 @@ const stats = [
           <li class="how__step">
             <span class="how__num">1</span>
             <h3>对话描述需求</h3>
-            <p>AI Agent 引导补全品类、参数与严格度，自动生成结构化需求档案，支持随时修正。</p>
+            <p>AI 引导你逐步说清品类、关键参数与重要程度，自动生成结构化需求档案，支持随时修正。</p>
           </li>
           <li class="how__step">
             <span class="how__num">2</span>
-            <h3>智能双通道匹配</h3>
-            <p>规则判定 + 语义召回，对已审核厂商打分排序，秒级返回候选。</p>
+            <h3>智能匹配</h3>
+            <p>在已审核厂商中综合打分排序，秒级返回候选。</p>
           </li>
           <li class="how__step">
             <span class="how__num">3</span>
-            <h3>可解释决策</h3>
-            <p>匹配理由、风险提示与原文溯源一应俱全，对比多家厂商后做出采购决策。</p>
+            <h3>决策有据可查</h3>
+            <p>匹配理由、风险提示与原文出处一应俱全，对比多家厂商后做出采购决策。</p>
           </li>
         </ol>
+      </div>
+    </section>
+
+    <!-- 数据证明（Proof） -->
+    <section id="proof" class="proof">
+      <div class="proof__inner">
+        <h2 class="section-title">每一条匹配，都有据可查</h2>
+        <p class="section-sub">厂商能力由 AI 从能力文档自动解析、经人工审核后进入匹配池；每一条匹配都可溯源到原始文档。</p>
+        <ul class="proof__grid">
+          <li class="proof__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            <h3>AI 解析 + 人工审核</h3>
+            <p>厂商上传能力文档，AI 提取结构化能力档案，审核通过后才进入匹配池。</p>
+          </li>
+          <li class="proof__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10M18 20V4M6 20v-4" /></svg>
+            <h3>智能匹配</h3>
+            <p>既严格比对硬性参数，也理解自然语言需求，综合打分排序。</p>
+          </li>
+          <li class="proof__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 15l2 2 4-4" /></svg>
+            <h3>出处可溯源</h3>
+            <p>每条匹配判定都能追溯到厂商原始能力文档逐项核对，不凭感觉。</p>
+          </li>
+        </ul>
       </div>
     </section>
 
     <!-- 分角色价值 -->
     <section id="product" class="product">
       <div class="product__inner">
-        <h2 class="section-title">为供需双方与管理者而设计</h2>
+        <h2 class="section-title">一个平台，连接供需两端</h2>
         <div class="product__grid">
           <article class="product__card">
             <h3>面向客户</h3>
@@ -222,18 +283,18 @@ const stats = [
             <h3>面向厂商</h3>
             <ul>
               <li>上传能力文档即生成结构化能力档案</li>
-              <li>字段级溯源，随时更新重新解析</li>
-              <li>能力完备度自检，引导补齐资料</li>
+              <li>每项能力都可追溯来源，随时更新重新解析</li>
+              <li>档案完善度提示，引导补齐资料</li>
               <li>审核通过后进入真实需求匹配池</li>
             </ul>
           </article>
           <article class="product__card">
-            <h3>面向管理者</h3>
+            <h3>平台保障</h3>
             <ul>
-              <li>需求 / 客户 / 厂商 / 日志数据概览</li>
-              <li>匹配结果追溯与复核</li>
-              <li>厂商审核与审计日志</li>
-              <li>全部操作留痕，可追踪</li>
+              <li>厂商能力经人工审核后进入匹配池</li>
+              <li>匹配全程留痕，可追溯、可复核</li>
+              <li>需求与数据受到保护</li>
+              <li>平台规则透明，操作有据可查</li>
             </ul>
           </article>
         </div>
@@ -243,8 +304,8 @@ const stats = [
     <!-- 智能音箱真实演示 -->
     <section id="demo" class="demo">
       <div class="demo__inner">
-        <h2 class="section-title">智能音箱品类 · 真实匹配实况</h2>
-        <p class="section-sub">以「智能音箱 / Android / 起订量 1000 台 / 交期 30 天」为例的真实匹配结果。</p>
+        <h2 class="section-title">真实匹配效果一览</h2>
+        <p class="section-sub">以「智能音箱 / Android / 起订量 1000 台 / 交期 30 天」为例的真实匹配结果，更多品类持续接入。</p>
         <ul class="demo__grid">
           <li v-for="v in demoVendors" :key="v.name" class="demo__card">
             <div class="demo__head">
@@ -261,9 +322,26 @@ const stats = [
         </ul>
         <div class="demo__cta">
           <button class="btn btn--primary btn--lg" type="button" @click="chatEntry">
-            亲自跑一次匹配
+            用你的需求，试一次真实匹配
             <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 真实用户证言（Social Proof） -->
+    <section id="voices" class="voices">
+      <div class="voices__inner">
+        <h2 class="section-title">采购与厂商怎么说</h2>
+        <div class="voices__grid">
+          <figure class="voices__item">
+            <blockquote>“以前找代工厂要一家家打电话确认产能与认证，现在对话描述需求，几分钟就能对比好几家，每条判定还能翻到原文核对。”</blockquote>
+            <figcaption><strong>采购负责人 · 智能硬件品牌商</strong><span>客户侧 · 演示数据</span></figcaption>
+          </figure>
+          <figure class="voices__item">
+            <blockquote>“上传一份能力文档就能生成结构化能力档案，审核通过后进入匹配池，省去了大量重复介绍公司的时间。”</blockquote>
+            <figcaption><strong>市场总监 · ODM 代工厂</strong><span>厂商侧 · 演示数据</span></figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -290,7 +368,7 @@ const stats = [
         <div class="footer__links">
           <a href="#how">如何工作</a>
           <a href="#product">产品特色</a>
-          <a href="#demo">智能音箱实况</a>
+          <a href="#demo">真实匹配演示</a>
           <a href="#top">返回顶部</a>
         </div>
         <p class="footer__copy">© 2026 需脉枢纽</p>
@@ -349,7 +427,9 @@ const stats = [
   background: rgba(248, 250, 252, 0.85);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--color-border);
+  transition: box-shadow 200ms ease;
 }
+.nav.is-scrolled { box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06); }
 .nav__inner {
   max-width: 1180px;
   margin: 0 auto;
@@ -378,7 +458,13 @@ const stats = [
 .nav__actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
 /* ---------- Hero ---------- */
-.hero { padding: 64px 24px 64px; }
+.hero {
+  padding: 64px 24px 64px;
+  background:
+    radial-gradient(58% 46% at 12% 0%, rgba(15, 23, 42, 0.04), transparent 70%),
+    radial-gradient(46% 42% at 92% 8%, rgba(3, 105, 161, 0.07), transparent 72%),
+    var(--color-background);
+}
 .hero__inner {
   max-width: 1180px;
   margin: 0 auto;
@@ -402,8 +488,8 @@ const stats = [
 .hero__cta { margin-top: 32px; display: flex; gap: 16px; flex-wrap: wrap; }
 .hero__stats { margin-top: 48px; display: grid; grid-template-columns: repeat(4, auto); gap: 32px; }
 .hero__stat { display: flex; flex-direction: column; gap: 4px; }
-.hero__stat strong { font-size: 26px; font-weight: 800; color: var(--color-primary); }
-.hero__stat span { font-size: 13px; color: var(--color-muted-foreground); }
+.hero__stat strong { font-size: 26px; font-weight: 800; color: var(--color-primary); white-space: nowrap; }
+.hero__stat span { font-size: 13px; color: var(--color-muted-foreground); white-space: nowrap; }
 
 /* ---------- 聊天预览 ---------- */
 .chat-preview {
@@ -425,6 +511,7 @@ const stats = [
 }
 .chat-preview__dot { width: 10px; height: 10px; border-radius: 50%; background: #34d399; }
 .chat-preview__live { margin-left: auto; font-size: 12px; background: rgba(255, 255, 255, 0.18); padding: 2px 8px; border-radius: 999px; }
+.hero__demo { position: relative; }
 .chat-preview__body { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 340px; }
 .msg { display: flex; gap: 8px; align-items: flex-start; opacity: 0; transform: translateY(8px); transition: opacity 400ms ease, transform 400ms ease; }
 .msg.is-in { opacity: 1; transform: none; }
@@ -485,31 +572,54 @@ const stats = [
 }
 .how__step h3 { font-size: 18px; font-weight: 700; color: var(--color-primary); }
 .how__step p { margin-top: 8px; font-size: 15px; line-height: 1.6; color: var(--color-muted-foreground); }
+/* 步骤连接箭头（桌面 3 列时显示） */
+.how__step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -18px;
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid #cbd5e1;
+  border-right: 2px solid #cbd5e1;
+  transform: translateY(-50%) rotate(45deg);
+}
 
 /* ---------- Product ---------- */
-.product { padding: 64px 24px; }
+.product { padding: 64px 24px; background: var(--color-card); border-block: 1px solid var(--color-border); }
 .product__inner { max-width: 1180px; margin: 0 auto; }
 .product__grid { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-.product__card { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 14px; padding: 32px; box-shadow: var(--shadow-sm); }
+.product__card { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 14px; padding: 32px; box-shadow: var(--shadow-sm); transition: box-shadow 200ms ease, transform 200ms ease; }
+.product__card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
 .product__card h3 { font-size: 18px; font-weight: 700; color: var(--color-primary); padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
 .product__card ul { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .product__card li { position: relative; padding-left: 20px; font-size: 15px; line-height: 1.55; color: var(--color-muted-foreground); }
 .product__card li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); }
 
 /* ---------- Demo ---------- */
-.demo { padding: 64px 24px; background: var(--color-card); border-block: 1px solid var(--color-border); }
+.demo { padding: 64px 24px; }
 .demo__inner { max-width: 1180px; margin: 0 auto; }
-.demo__grid { margin-top: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.demo__grid { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
 .demo__card { border: 1px solid var(--color-border); border-radius: 14px; padding: 24px; box-shadow: var(--shadow-sm); transition: box-shadow 200ms ease, transform 200ms ease; }
 .demo__card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
 .demo__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.demo__name { font-size: 15px; font-weight: 700; color: var(--color-primary); line-height: 1.4; }
+.demo__name { font-size: 15px; font-weight: 700; color: var(--color-primary); line-height: 1.4; white-space: nowrap; }
 .demo__score { flex: none; font-size: 13px; font-weight: 800; color: var(--color-accent); }
 .demo__meta { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .demo__meta div { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; }
 .demo__meta dt { color: var(--color-muted-foreground); }
 .demo__meta dd { margin: 0; font-weight: 600; color: var(--color-foreground); }
 .demo__cta { margin-top: 48px; text-align: center; }
+
+/* ---------- 真实证言 ---------- */
+.voices { padding: 64px 24px; background: var(--color-card); border-block: 1px solid var(--color-border); }
+.voices__inner { max-width: 1180px; margin: 0 auto; }
+.voices__grid { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.voices__item { margin: 0; background: var(--color-card); border: 1px solid var(--color-border); border-radius: 14px; padding: 32px; box-shadow: var(--shadow-sm); }
+.voices__item blockquote { margin: 0; font-size: 16px; line-height: 1.7; color: var(--color-foreground); }
+.voices__item figcaption { margin: 16px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.voices__item figcaption strong { font-size: 14px; font-weight: 700; color: var(--color-primary); }
+.voices__item figcaption span { font-size: 13px; color: var(--color-muted-foreground); }
 
 /* ---------- CTA ---------- */
 .cta { padding: 64px 24px; background: var(--color-primary); color: #fff; }
@@ -525,18 +635,25 @@ const stats = [
 .footer__links { display: flex; gap: 24px; flex-wrap: wrap; }
 .footer__links a { color: #cbd5e1; font-size: 14px; transition: color 200ms ease; }
 .footer__links a:hover { color: #fff; }
-.footer__copy { width: 100%; margin-top: 24px; font-size: 13px; color: #64748b; text-align: center; }
+.footer__copy { width: 100%; margin-top: 24px; font-size: 13px; color: #94a3b8; text-align: center; }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 1024px) {
   .hero__inner { grid-template-columns: 1fr; }
-  .proof__grid, .how__steps, .product__grid { grid-template-columns: 1fr; }
+  .proof__grid, .how__steps, .product__grid, .voices__grid { grid-template-columns: 1fr; }
   .demo__grid { grid-template-columns: repeat(2, 1fr); }
+  .how__step:not(:last-child)::after { display: none; }
 }
 @media (max-width: 768px) {
   .nav__links { display: none; }
   .hero__stats { grid-template-columns: repeat(2, 1fr); }
   .demo__grid { grid-template-columns: 1fr; }
+  /* 聊天预览：移动端静态化 + 压缩高度 */
+  .chat-preview__body { min-height: 320px; gap: 8px; padding: 12px; }
+  .msg p { padding: 10px 12px; font-size: 13px; }
+  .result__row { padding: 10px 12px; font-size: 12px; }
+  .result__cite { padding: 6px 10px; }
+  .msg, .chips, .result { opacity: 1 !important; transform: none !important; transition: none !important; }
 }
 @media (max-width: 480px) {
   .nav__inner { padding: 12px 16px; gap: 12px; }

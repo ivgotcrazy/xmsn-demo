@@ -4,7 +4,7 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 
-import { getToken, setToken, type UserOut } from "@xmsn/api"
+import { authGuest, getGuestToken, getToken, setGuestToken, setToken, type UserOut } from "@xmsn/api"
 
 const ROLE_KEY = "xmsn_role"
 const USER_KEY = "xmsn_user"
@@ -29,6 +29,7 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = u
     role.value = u.role
     setToken(t)
+    setGuestToken(null) // 真实登录后清除游客 token
     localStorage.setItem(ROLE_KEY, u.role)
     localStorage.setItem(USER_KEY, JSON.stringify(u))
   }
@@ -38,11 +39,29 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = null
     role.value = ""
     setToken(null)
+    setGuestToken(null)
     localStorage.removeItem(ROLE_KEY)
     localStorage.removeItem(USER_KEY)
   }
 
+  /** 局部更新当前用户并持久化（如注册厂商后回写 vendor_id）。 */
+  function updateUser(partial: Partial<UserOut>): void {
+    if (!user.value) return
+    user.value = { ...user.value, ...partial }
+    localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+  }
+
   const isAuthenticated = (): boolean => !!getToken()
 
-  return { token, user, role, setAuth, logout, isAuthenticated }
+  /** 是否游客模式：存在游客会话 token（sessionStorage）。 */
+  const isGuest = (): boolean => !!getGuestToken()
+
+  /** 进入游客模式：申请游客 token（不落账号）存 sessionStorage，体验结束（关窗口）即失效。 */
+  async function enterGuestMode(): Promise<void> {
+    const res = await authGuest()
+    setGuestToken(res.access_token)
+    role.value = "guest"
+  }
+
+  return { token, user, role, setAuth, updateUser, logout, isAuthenticated, isGuest, enterGuestMode }
 })

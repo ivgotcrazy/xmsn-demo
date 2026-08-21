@@ -43,8 +43,9 @@ class Settings(BaseSettings):
     # 认证（JWT）
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 60 * 24 * 7
-    # 验证码：PoC 无短信/邮件网关时关闭（false=仅发送日志）；接入网关后开启
+    jwt_expire_minutes: int = 60 * 24 * 7    # 游客会话（匿名体验）：token 有效期 24h；匿名数据 TTL 清理（小时）
+    guest_expire_minutes: int = 60 * 24
+    guest_cleanup_hours: int = 24    # 验证码：PoC 无短信/邮件网关时关闭（false=仅发送日志）；接入网关后开启
     verify_code_required: bool = False
 
     # 业务常量

@@ -30,10 +30,17 @@ function logout(): void {
         </RouterLink>
         <div class="main-layout__spacer" />
         <div class="main-layout__user">
-          <span class="main-layout__who">
-            客户<span v-if="auth.user"> · {{ auth.user.phone }}</span>
-          </span>
-          <NButton text size="small" class="main-layout__logout" @click="logout()">退出登录</NButton>
+          <template v-if="auth.isGuest()">
+            <span class="main-layout__who">游客 · 对话与结果不保存</span>
+            <NButton size="small" type="primary" @click="router.push('/customer/register')">注册</NButton>
+            <NButton size="small" @click="router.push('/login')">登录</NButton>
+          </template>
+          <template v-else>
+            <span class="main-layout__who">
+              客户<span v-if="auth.user"> · {{ auth.user.phone }}</span>
+            </span>
+            <NButton text size="small" class="main-layout__logout" @click="logout()">退出登录</NButton>
+          </template>
         </div>
       </header>
       <main class="main-layout__content">

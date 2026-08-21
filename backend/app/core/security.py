@@ -1,6 +1,7 @@
 """安全：JWT 签发/校验 + 口令哈希（user-auth 域使用，M2 完善）。"""
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
@@ -24,6 +25,15 @@ def create_access_token(subject: str, role: str, expires_minutes: int | None = N
         minutes=expires_minutes or settings.jwt_expire_minutes
     )
     payload = {"sub": subject, "role": role, "exp": expire}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def create_guest_token(expires_minutes: int | None = None) -> str:
+    """游客会话 Token（匿名体验）：不落账号，sub=随机会话标识（guest_session_id）。"""
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=expires_minutes or settings.guest_expire_minutes
+    )
+    payload = {"sub": str(uuid.uuid4()), "role": "guest", "guest": True, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

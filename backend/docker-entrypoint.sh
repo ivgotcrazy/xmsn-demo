@@ -71,5 +71,30 @@ async def init_db() -> None:
 asyncio.run(init_db())
 PY
 
+echo "[xmsn] 对齐匿名/游客会话列（幂等 ALTER）..."
+python - <<'PY'
+import asyncio
+
+from sqlalchemy import text
+
+from app.db.session import engine
+
+
+async def migrate() -> None:
+    async with engine.begin() as conn:
+        for sql in [
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN NOT NULL DEFAULT false",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS guest_session_id UUID",
+            "CREATE INDEX IF NOT EXISTS ix_conversations_is_anonymous ON conversations (is_anonymous)",
+            "CREATE INDEX IF NOT EXISTS ix_conversations_guest_session_id ON conversations (guest_session_id)",
+            "ALTER TABLE conversations ALTER COLUMN user_id DROP NOT NULL",
+            "ALTER TABLE customer_requests ALTER COLUMN user_id DROP NOT NULL",
+        ]:
+            await conn.execute(text(sql))
+
+
+asyncio.run(migrate())
+PY
+
 echo "[xmsn] 启动 uvicorn: $@"
 exec "$@"

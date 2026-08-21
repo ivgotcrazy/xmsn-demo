@@ -3,11 +3,11 @@
  * 01C 能力材料导入（重设计）：仅上传文档。表格记录所有导入文档（文件名/大小/时间/解析状态），
  * 上传即自动解析（异步）；解析完成可去「我的档案」查看能力档案。无档案内容展示（档案在独立页）。
  */
-import { h, reactive, ref } from "vue"
+import { h, onMounted, reactive, ref } from "vue"
 import { useRouter } from "vue-router"
 import { NButton, NDataTable, NTag, NUpload, useMessage, type UploadFileInfo } from "naive-ui"
 
-import { vendorCapabilityVendorIdDocumentsDocumentId } from "@xmsn/api"
+import { vendorCapabilityVendorId, vendorCapabilityVendorIdDocumentsDocumentId } from "@xmsn/api"
 
 import { uploadCapability } from "@/api/upload"
 import { useAuthStore } from "@/stores/auth"
@@ -23,9 +23,31 @@ interface DocRow {
   size: string
   time: string
   status: DocStatus
+  /** 存储 file_id（删除接口按 file_id 匹配） */
+  fileId?: string
 }
 
 const rows = ref<DocRow[]>([])
+
+/** 加载已导入的能力文档（seed / 历史上传）：doc_refs → 表格行 */
+async function loadExisting(): Promise<void> {
+  const vendorId = auth.user?.vendor_id
+  if (!vendorId) return
+  try {
+    const cap = await vendorCapabilityVendorId(vendorId)
+    const refs = (cap.doc_refs ?? []) as Array<{ file_id?: string; name?: string }>
+    rows.value = refs.map((r) => ({
+      name: r.name ?? "未知文档",
+      size: "—",
+      time: "—",
+      status: "done",
+      fileId: r.file_id,
+    }))
+  } catch {
+    // 尚无能力档案或未就绪：保持空表格
+  }
+}
+onMounted(loadExisting)
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`
@@ -55,9 +77,12 @@ async function handleUpload(data: { fileList: UploadFileInfo[] }): Promise<void>
   })
   rows.value = [row, ...rows.value]
   try {
-    await uploadCapability({ vendorId, files: [file.file] })
+    const res = await uploadCapability({ vendorId, files: [file.file] })
     row.status = "done"
-    message.success(`${file.file.name} 解析完成`)
+    const refs = (res.doc_refs ?? []) as Array<{ file_id?: string; name?: string }>
+    const fileName = file.file.name
+    row.fileId = refs.find((r) => r.name === fileName)?.file_id
+    message.success(`${fileName} 解析完成`)
   } catch {
     row.status = "failed"
     message.error(`${file.file.name} 解析失败`)
@@ -79,7 +104,7 @@ async function handleDelete(row: DocRow): Promise<void> {
     return
   }
   try {
-    await vendorCapabilityVendorIdDocumentsDocumentId(vendorId, row.name)
+    await vendorCapabilityVendorIdDocumentsDocumentId(vendorId, row.fileId ?? row.name)
     rows.value = rows.value.filter((r) => r !== row)
     message.success(`已删除 ${row.name}，能力档案已重新生成`)
   } catch {

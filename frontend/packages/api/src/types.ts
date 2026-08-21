@@ -183,6 +183,11 @@ export type AuthToken = {
   expires_in: number;
   user: UserOut;
 };
+export type GuestToken = {
+  access_token: string;
+  token_type?: string;
+  expires_in: number;
+};
 export type Body_upload_api_v1_files_upload_post = {
   file: string;
 };

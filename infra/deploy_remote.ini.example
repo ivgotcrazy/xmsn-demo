@@ -1,0 +1,25 @@
+# 需脉枢纽 远程部署配置（复制为 deploy_remote.ini 后填写；已被 .gitignore 忽略，不进版本库）
+[remote]
+host = 1.2.3.4                  # 远端 IP 或域名（必填）
+user = root                     # 远端 SSH 用户（必填）
+ssh_port = 22                   # SSH 端口
+# ssh_key = ~/.ssh/id_ed25519   # 可选；与 password 二选一
+# password =                     # 可选；SSH 密码（与 ssh_key 二选一；需本地 sshpass：sudo apt install sshpass）
+path = /opt/xmsn-demo           # 远端部署目录（仅放置 compose×2 / nginx.conf / .env 与镜像包）
+# domain = xmsn.example.com     # 可选；填了部署完成后的访问地址用它，否则用 host
+
+# ---- 行为控制（显式配置，无自动探测规则）----
+env_force = false   # true=用本地 infra/.env 覆盖远端已有 .env；false=保留远端 .env
+seed = never        # always=重灌演示数据(seed_curated --reset) | never=不动数据
+backup = false      # true=部署前先 pg_dump 备份回本地 infra/backups/
+clean = false       # true=先 docker compose down -v（清空数据卷，慎用）
+compress = false    # true=镜像 tar 先 gzip 再上传（省带宽）
+# min_mem_mb = 512   # 前置检查最低可用内存（2GB 小机可用内存在 1GB 边界波动，512 够演示）
+# min_disk_gb = 2    # 可选；前置检查最低磁盘剩余 GB
+
+# ---- 网络代理（可选；国内访问 Docker Hub/PyPI 失败或极慢时用）----
+# http_proxy = http://172.27.144.1:7890   # 本地 build 的 RUN 步骤代理（pip/npm）；用 WSL 宿主 IP，容器内 127.0.0.1 是容器自己
+# https_proxy = http://172.27.144.1:7890
+# remote_http_proxy = http://x.x.x.x:port  # 远端 docker pull/up 时 export（可留空=远端不走代理）
+# remote_https_proxy = http://x.x.x.x:port
+# 提示：本地基础镜像拉取走 docker daemon（需配 daemon.json 代理或镜像加速器）；此处配的是 Dockerfile 内部网络（pip/npm）

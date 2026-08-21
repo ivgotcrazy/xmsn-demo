@@ -32,7 +32,7 @@ Db = AsyncSession
 async def start(
     payload: ConversationStartRequest, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[ConversationStartResponse]:
-    return ApiResponse(data=await conv_service.start(db, user.user_id))
+    return ApiResponse(data=await conv_service.start(db, user.user_id, is_guest=user.role == "guest"))
 
 
 @router.post("/message", response_model=ApiResponse[MessageResponse], summary="发送消息")
@@ -40,34 +40,35 @@ async def message(
     payload: MessageRequest, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[MessageResponse]:
     return ApiResponse(data=await conv_service.message(
-        db, payload.conversation_id, payload.message, payload.clicked_option))
+        db, payload.conversation_id, payload.message, payload.clicked_option,
+        user_id=user.user_id, role=user.role))
 
 
 @router.post("/confirm", response_model=ApiResponse[ConfirmResponse], summary="确认需求档案并提交匹配（单端点）")
 async def confirm(
     payload: ConfirmRequest, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[ConfirmResponse]:
-    return ApiResponse(data=await conv_service.confirm(db, payload.conversation_id, user.user_id, payload.demand_points))
+    return ApiResponse(data=await conv_service.confirm(db, payload.conversation_id, user.user_id, payload.demand_points, role=user.role))
 
 
 # ---- 历史（6.3.5）----
 @list_router.get("", response_model=ApiResponse[ConversationListResponse], summary="客户会话列表")
 async def list_conversations(user: CurrentUser, db: AsyncSession = Depends(get_session)) -> ApiResponse[ConversationListResponse]:
-    return ApiResponse(data=await conv_service.list_conversations(db, user.user_id))
+    return ApiResponse(data=await conv_service.list_conversations(db, user.user_id, role=user.role))
 
 
 @router.get("/{conversation_id}/messages", response_model=ApiResponse[ConversationMessagesResponse], summary="会话消息历史（02A 切换会话恢复现场）")
 async def list_messages(
     conversation_id: str, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[ConversationMessagesResponse]:
-    return ApiResponse(data=await conv_service.list_messages(db, conversation_id))
+    return ApiResponse(data=await conv_service.list_messages(db, conversation_id, user_id=user.user_id, role=user.role))
 
 
 @router.get("/{conversation_id}/requests", response_model=ApiResponse[RequestSnapshotListResponse], summary="需求快照版本列表")
 async def list_requests(
     conversation_id: str, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[RequestSnapshotListResponse]:
-    return ApiResponse(data=await conv_service.list_requests(db, conversation_id))
+    return ApiResponse(data=await conv_service.list_requests(db, conversation_id, user_id=user.user_id, role=user.role))
 
 
 @router.delete(
@@ -78,7 +79,7 @@ async def list_requests(
 async def delete_conversation(
     conversation_id: str, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[DeleteResponse]:
-    return ApiResponse(data=await conv_service.delete_conversation(db, conversation_id))
+    return ApiResponse(data=await conv_service.delete_conversation(db, conversation_id, user_id=user.user_id, role=user.role))
 
 
 @router.delete(
@@ -89,4 +90,4 @@ async def delete_conversation(
 async def delete_request(
     conversation_id: str, request_id: str, user: CurrentUser, db: AsyncSession = Depends(get_session)
 ) -> ApiResponse[DeleteResponse]:
-    return ApiResponse(data=await conv_service.delete_request(db, conversation_id, request_id))
+    return ApiResponse(data=await conv_service.delete_request(db, conversation_id, request_id, user_id=user.user_id, role=user.role))

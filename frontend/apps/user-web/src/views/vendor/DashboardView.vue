@@ -2,14 +2,13 @@
 /**
  * 01B 厂商控制台（原型明确化 §4）：企业信息 + 审核状态 + 未完善资料 / 已通过 X 条能力+摘要。
  */
-import { computed, onMounted, ref } from "vue"
+import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { NButton, NCard, NSpin, NTag, useMessage } from "naive-ui"
+import { NButton, NCard, NSpin, useMessage } from "naive-ui"
 
 import { vendorCapabilityVendorId, vendorVendorId, type CapabilityOut, type VendorOut } from "@xmsn/api"
 
-import { AUDIT_META, type AuditStatus } from "@xmsn/types"
-
+import VendorInfoCard from "@/components/vendor/VendorInfoCard.vue"
 import { useAuthStore } from "@/stores/auth"
 
 const router = useRouter()
@@ -18,8 +17,6 @@ const auth = useAuthStore()
 const vendor = ref<VendorOut | null>(null)
 const cap = ref<CapabilityOut | null>(null)
 const loading = ref(true)
-const auditMeta = computed(() => AUDIT_META[(vendor.value?.audit_status ?? "pending") as AuditStatus])
-const capabilityCount = computed(() => (cap.value ? 1 : 0))
 
 onMounted(async () => {
   const vendorId = auth.user?.vendor_id
@@ -28,12 +25,13 @@ onMounted(async () => {
     return
   }
   try {
-    const [v, c] = await Promise.all([
-      vendorVendorId(vendorId),
-      vendorCapabilityVendorId(vendorId),
-    ])
-    vendor.value = v
-    cap.value = c
+    vendor.value = await vendorVendorId(vendorId)
+    // 能力档案可能尚未创建（新厂商）→ 接口 404 视为"无能力"，不阻断控制台
+    try {
+      cap.value = await vendorCapabilityVendorId(vendorId)
+    } catch {
+      cap.value = null
+    }
   } catch {
     message.error("加载厂商信息失败")
   } finally {
@@ -46,17 +44,7 @@ onMounted(async () => {
   <NSpin :show="loading">
     <div class="dashboard">
       <template v-if="vendor">
-      <div class="dashboard__head">
-        <div>
-          <h2>{{ vendor.company_name }}</h2>
-          <div class="dashboard__meta">
-            {{ vendor.location ?? "—" }} · {{ vendor.main_industry ?? "—" }}
-          </div>
-        </div>
-        <NTag size="large" :type="auditMeta.tagType" :bordered="false">
-          {{ auditMeta.label }}
-        </NTag>
-      </div>
+      <VendorInfoCard :vendor="vendor" />
 
       <!-- 原型明确化 §4：未完善资料 提示卡 -->
       <div v-if="!cap" class="dashboard__empty">
@@ -65,11 +53,8 @@ onMounted(async () => {
         <NButton type="primary" @click="router.push('/vendor/capability')">立即录入能力</NButton>
       </div>
 
-      <!-- 原型明确化 §4：已通过 X 条能力 + 一句话摘要 -->
-      <div v-else-if="vendor.audit_status === 'passed'" class="dashboard__tip">
-        已通过 {{ capabilityCount }} 条能力：{{ cap?.summary_text }}
-      </div>
-      <div v-else class="dashboard__tip">
+      <!-- 能力概要在「能力档案」页查看，控制台不展示摘要 -->
+      <div v-else-if="vendor.audit_status !== 'passed'" class="dashboard__tip">
         企业资料待审核，通过后能力进入匹配池。
       </div>
 
@@ -95,21 +80,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.dashboard__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-16);
-}
-.dashboard__head h2 {
-  margin: 0;
-  font-size: var(--font-size-20);
-}
-.dashboard__meta {
-  margin-top: var(--space-4);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-13);
-}
 .dashboard__tip {
   padding: var(--space-12) var(--space-16);
   background: var(--color-primary-bg);

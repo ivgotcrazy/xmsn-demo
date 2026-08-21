@@ -239,6 +239,8 @@ async def _run_async_profile_update(request_id: str, conversation_id: str) -> No
             conv = await db.get(Conversation, uuid.UUID(conversation_id))
             if not req or not conv:
                 return
+            if conv.user_id is None:
+                return  # 游客会话不更新画像
             demand = req.structured_demand or {}
             history = conv.conversation_history or []
             user_msgs = [m.get("content") for m in history if m.get("role") == "user"]

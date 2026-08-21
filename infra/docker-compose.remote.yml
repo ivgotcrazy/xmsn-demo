@@ -1,0 +1,14 @@
+# 需脉枢纽 远程部署 override（与 docker-compose.local.yml 叠加，仅远程/公网部署时使用）
+# 用途：公网只暴露 web :80；PostgreSQL / Milvus 不对外发布端口（只走 compose 内网），
+#       避免数据库/向量库裸奔到互联网（对齐架构 11.2：仅 Nginx :80/:443 对外）。
+# 叠加方式（由 infra/deploy_remote.py 自动执行）：
+#   docker compose -f docker-compose.local.yml -f docker-compose.remote.yml up -d
+#
+# 注意：compose 对多值字段（ports 等）默认是"拼接"而非"替换"，`ports: []` 无法清除
+#       base 的端口发布；必须用 v2.24+ 的 `!reset` 标签显式清空。
+#       deploy_remote.py 前置检查会校验远端 compose 版本 >= 2.24。
+services:
+  postgres:
+    ports: !reset []
+  milvus:
+    ports: !reset []

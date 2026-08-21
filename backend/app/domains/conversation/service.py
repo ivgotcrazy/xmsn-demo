@@ -20,7 +20,7 @@ from app.domains.conversation import agent, schema as req_schema
 from app.domains.conversation import profile
 from app.domains.conversation.schema import SlotTriState
 from app.db.models import Conversation, ConversationEvent, CustomerRequest, MatchRun
-from app.schemas.common import err_400, err_404
+from app.schemas.common import err_400, err_403, err_404
 from app.schemas.conversation import (
     AssistantMessage,
     ConfirmResponse,
@@ -129,12 +129,17 @@ def _slots_snapshot(state: dict) -> dict:
     }
 
 
-async def start(db: AsyncSession, user_id: str) -> ConversationStartResponse:
+async def start(db: AsyncSession, user_id: str, *, is_guest: bool = False) -> ConversationStartResponse:
     # 首问即品类锚点：预置 _pending，使首个选项点击走确定性直写（v2.1 点击=确定性执行）
-    conv = Conversation(user_id=uuid.UUID(user_id), title="新会话", status="active",
-                        conversation_history=[],
-                        current_slots={"_pending": {"key": "product_type",
-                                                     "options": ["机顶盒", "智能音箱", "IoT设备"]}})
+    # 游客：user_id 置空 + is_anonymous + guest_session_id=token.sub（不落账号，仅按会话标识归属）
+    conv = Conversation(
+        user_id=None if is_guest else uuid.UUID(user_id),
+        is_anonymous=is_guest,
+        guest_session_id=uuid.UUID(user_id) if is_guest else None,
+        title="新会话", status="active",
+        conversation_history=[],
+        current_slots={'_pending': {'key': 'product_type',
+                                    'options': ['机顶盒', '智能音箱', 'IoT设备']}})
     db.add(conv)
     await db.commit()
     await db.refresh(conv)
@@ -161,6 +166,15 @@ async def _load_conv(db: AsyncSession, conversation_id: str) -> Conversation:
     if not conv or conv.deleted_at is not None:
         raise err_404("会话不存在")
     return conv
+
+
+def _ensure_access(conv: Conversation, user_id: str, role: str) -> None:
+    """会话归属/匿名归属校验：真实用户只能访问自己的会话；游客只能访问本会话标识下的匿名会话。"""
+    if conv.is_anonymous:
+        if role != "guest" or not conv.guest_session_id or str(conv.guest_session_id) != user_id:
+            raise err_403("无权访问该会话")
+    elif role == "guest" or str(conv.user_id) != user_id:
+        raise err_403("无权访问该会话")
 
 
 def _bump_stall(state: dict, progress: bool) -> None:
@@ -214,7 +228,7 @@ async def _non_extract_message(
         state["_pending"] = {"key": None, "options": opts}
         evt, otype = "recap", "actions" if _done else "none"
     elif intent == "recommend":
-        profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
+        profile_ctx = await profile.build_profile_context(db, str(conv.user_id)) if conv.user_id else ""
         rec = agent.build_recommendation(state, profile_ctx)
         if not rec:
             # 无待填维度可给结构化建议（完成态/数字字段无默认/画像无值）→
@@ -250,9 +264,11 @@ async def _non_extract_message(
     )
 
 
-async def message(db: AsyncSession, conversation_id: str, text: str, clicked_option=None) -> MessageResponse:
+async def message(db: AsyncSession, conversation_id: str, text: str, clicked_option=None, *,
+                  user_id: str, role: str) -> MessageResponse:
     """对话轮次（代理详细设计 v2 8 章，v2.1 收敛）：点击=确定性执行；自由文本→推理节点（三工具）→ 按结构化 intent 分流。"""
     conv = await _load_conv(db, conversation_id)
+    _ensure_access(conv, user_id, role)
     state: dict = dict(conv.current_slots or {})
     history: list = list(conv.conversation_history or [])
     turn = len(history) + 1
@@ -263,7 +279,7 @@ async def message(db: AsyncSession, conversation_id: str, text: str, clicked_opt
         return await _handle_click(db, conv, state, history, turn, clicked_option, text)
 
     # ---- 自由文本 → 推理节点（三工具：填槽 / classify / submit；不做字符串匹配）----
-    profile_ctx = await profile.build_profile_context(db, str(conv.user_id))
+    profile_ctx = await profile.build_profile_context(db, str(conv.user_id)) if conv.user_id else ""
     rr = await agent.agent_reasoning(
         state, text, db=db,
         meta={"conversation_id": conversation_id, "turn": turn, "user_profile": profile_ctx},
@@ -512,20 +528,27 @@ async def _do_confirm(db: AsyncSession, conv: Conversation, demand_points=None) 
     return req, run, warnings
 
 
-async def confirm(db: AsyncSession, conversation_id: str, user_id: str, demand_points=None) -> ConfirmResponse:
+async def confirm(db: AsyncSession, conversation_id: str, user_id: str, demand_points=None, *,
+                  role: str = "customer") -> ConfirmResponse:
     """确认需求档案并提交匹配（单端点，SC-22/25；D7 两步化：demand_points 可微调 strictness）。"""
     conv = await _load_conv(db, conversation_id)
+    _ensure_access(conv, user_id, role)
     req, _run, warnings = await _do_confirm(db, conv, demand_points)
     return ConfirmResponse(request_id=str(req.request_id), version=req.version,
                            redirect_to=f"/customer/matches/{req.request_id}", warnings=warnings)
 
 
-async def list_conversations(db: AsyncSession, user_id: str) -> ConversationListResponse:
-    res = await db.execute(
-        select(Conversation)
-        .where(Conversation.user_id == uuid.UUID(user_id), Conversation.deleted_at.is_(None))
-        .order_by(Conversation.updated_at.desc())
-    )
+async def list_conversations(db: AsyncSession, user_id: str, *, role: str = "customer") -> ConversationListResponse:
+    # 真实用户按 user_id；游客按 guest_session_id（匿名会话不进任何人的历史）
+    if role == "guest":
+        q = select(Conversation).where(
+            Conversation.guest_session_id == uuid.UUID(user_id), Conversation.deleted_at.is_(None)
+        )
+    else:
+        q = select(Conversation).where(
+            Conversation.user_id == uuid.UUID(user_id), Conversation.deleted_at.is_(None)
+        )
+    res = await db.execute(q.order_by(Conversation.updated_at.desc()))
     convs = res.scalars().all()
     items = []
     for c in convs:
@@ -541,8 +564,9 @@ async def list_conversations(db: AsyncSession, user_id: str) -> ConversationList
     return ConversationListResponse(conversations=items, total=len(items))
 
 
-async def list_messages(db: AsyncSession, conversation_id: str) -> ConversationMessagesResponse:
+async def list_messages(db: AsyncSession, conversation_id: str, *, user_id: str, role: str) -> ConversationMessagesResponse:
     conv = await _load_conv(db, conversation_id)
+    _ensure_access(conv, user_id, role)
     history = conv.conversation_history or []
     messages = [
         ConversationMessageItem(role=m["role"], content=m["content"], options=m.get("options", []),
@@ -557,8 +581,9 @@ async def list_messages(db: AsyncSession, conversation_id: str) -> ConversationM
     )
 
 
-async def list_requests(db: AsyncSession, conversation_id: str) -> RequestSnapshotListResponse:
+async def list_requests(db: AsyncSession, conversation_id: str, *, user_id: str, role: str) -> RequestSnapshotListResponse:
     conv = await _load_conv(db, conversation_id)
+    _ensure_access(conv, user_id, role)
     res = await db.execute(
         select(CustomerRequest)
         .where(CustomerRequest.conversation_id == conv.conversation_id, CustomerRequest.deleted_at.is_(None))
@@ -576,15 +601,17 @@ async def list_requests(db: AsyncSession, conversation_id: str) -> RequestSnapsh
     return RequestSnapshotListResponse(requests=items, total=len(items))
 
 
-async def delete_conversation(db: AsyncSession, conversation_id: str) -> dict:
+async def delete_conversation(db: AsyncSession, conversation_id: str, *, user_id: str, role: str) -> dict:
     conv = await _load_conv(db, conversation_id)
+    _ensure_access(conv, user_id, role)
     conv.deleted_at = datetime.utcnow()
     await db.commit()
     return {"id": conversation_id, "deleted": True, "deleted_at": conv.deleted_at}
 
 
-async def delete_request(db: AsyncSession, conversation_id: str, request_id: str) -> dict:
+async def delete_request(db: AsyncSession, conversation_id: str, request_id: str, *, user_id: str, role: str) -> dict:
     conv = await _load_conv(db, conversation_id)
+    _ensure_access(conv, user_id, role)
     try:
         rid = uuid.UUID(request_id)
     except ValueError:

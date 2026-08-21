@@ -12,12 +12,22 @@ xmsn-demo/
 └── README.md
 ```
 
-## 一键部署（唯一入口，保证数据全新）
+## 一键部署·本地（唯一本地入口，保证数据全新）
 ```bash
 # docker 在 WSL 内，需在 WSL 中执行：
-wsl -d Ubuntu-22.04 -- bash infra/deploy.sh
+wsl -d Ubuntu-22.04 -- bash infra/deploy_local.sh
 ```
-`infra/deploy.sh` = 全铲（`down -v` 清空 PG/Milvus/uploads 数据卷）→ 全新构建 → 启动（api 启动时 `create_all` 建全新空表）→ 全量重灌演示数据（`seed_curated --reset`，10 家智能音箱厂商 + 10 份 PDF + 知识 + 客户/管理员/厂家账号）。**数据重灌只发生在此部署动作**，容器日常重启不重灌。
+`infra/deploy_local.sh` = 全铲（`down -v` 清空 PG/Milvus/uploads 数据卷）→ 全新构建 → 启动（api 启动时 `create_all` 建全新空表）→ 全量重灌演示数据（`seed_curated --reset`，10 家智能音箱厂商 + 10 份 PDF + 知识 + 客户/管理员/厂家账号）。**数据重灌只发生在此部署动作**，容器日常重启不重灌。
+
+## 一键部署·远程（deploy_remote.py）
+复制 `infra/deploy_remote.ini.example` → `infra/deploy_remote.ini`，填写远端后：
+```powershell
+python infra/deploy_remote.py
+# 可选：--host/--user/--seed always/--backup/--clean/--compress/--force-env
+```
+流程 = 远端前置检查（[OK]/[FAIL] 逐项，任一不满足退出）→ 上传部署文件（compose×2 + nginx + .env，**远端不构建**）→ 本地构建镜像 → `docker save` → scp 上传 → 远端 `docker load` → `docker compose up -d`（叠加 `docker-compose.remote.yml` 收敛端口，公网仅暴露 80）→ `/healthz` 探活 → 按配置 `seed=always|never` 灌数据。远端 `.env` 默认保留，占位 `JWT_SECRET`/`ADMIN_INIT_PASSWORD` 自动随机加固。详见脚本头部注释。
+
+认证：默认 SSH 密钥（`ssh_key`）；也可在 `deploy_remote.ini` 配 `password`（需本地 sshpass：`sudo apt install sshpass`，或用环境变量 `XMSN_SSH_PASSWORD`），二者二选一。
 
 ## 一键启动（M8 容器化，开发调试）
 ```powershell
@@ -38,7 +48,7 @@ docker compose exec api python scripts/seed_data.py
 | 管理员 | 13800000000 | 123456 | http://localhost:5174（数据概览/需求/厂商/客户/日志） |
 
 ## 本地开发模式（手动启动，替代容器化）
-- 基础设施：`cd infra && docker compose up -d`（PostgreSQL :5432 + Milvus :19530）
+- 基础设施：`cd infra && docker compose -f docker-compose.local.yml up -d`（PostgreSQL :5432 + Milvus :19530）
 - 后端：`cd backend && .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000`
 - 客户端：`cd frontend/apps/user-web && $env:VITE_USE_MOCK="false"; npm run dev`（:5173）
 - 管理后台：`cd frontend/apps/admin-web && $env:VITE_USE_MOCK="false"; npm run dev`（:5174）

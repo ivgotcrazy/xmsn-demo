@@ -1,7 +1,7 @@
 /* 生成物（只读勿手改）—— 由 scripts/generate.ts 从 openapi.json 契约快照生成 */
 /* API 客户端：统一经 http.request 封装（JWT 注入 + 统一响应 {code,message,data} 解包） */
 import { request } from "./http"
-import type { RegisterRequest, AuthToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, DeleteResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, CustomerListResponse, AdminLogListResponse, KnowledgeListResponse, KnowledgeCreateRequest, KnowledgeItemOut, KnowledgeDeleteResponse, DocumentPreviewResponse } from "./types"
+import type { RegisterRequest, AuthToken, GuestToken, LoginRequest, SendCodeRequest, UserOut, VendorRegisterRequest, VendorOut, CapabilityOut, UploadResult, ConversationStartRequest, ConversationStartResponse, MessageRequest, MessageResponse, ConfirmRequest, ConfirmResponse, ConversationMessagesResponse, RequestSnapshotListResponse, DeleteResponse, ConversationListResponse, MatchComputeRequest, MatchComputeResponse, MatchDetailResponse, AuditRequest, AuditResponse, VendorListResponse, AdminStatsResponse, AdminRequestListResponse, CustomerListResponse, AdminLogListResponse, KnowledgeListResponse, KnowledgeCreateRequest, KnowledgeItemOut, KnowledgeDeleteResponse, DocumentPreviewResponse } from "./types"
 
 export async function healthz(): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>("/healthz", { method: "GET" })
@@ -21,6 +21,10 @@ export async function authSendCode(body: SendCodeRequest): Promise<Record<string
 
 export async function authMe(): Promise<UserOut> {
   return request<UserOut>("/api/v1/auth/me", { method: "GET" })
+}
+
+export async function authGuest(): Promise<GuestToken> {
+  return request<GuestToken>("/api/v1/auth/guest", { method: "POST" })
 }
 
 export async function vendorRegister(body: VendorRegisterRequest): Promise<VendorOut> {

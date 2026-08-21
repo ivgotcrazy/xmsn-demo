@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import FastAPI, Request
@@ -70,12 +71,49 @@ def create_app() -> FastAPI:
     async def _start_worker() -> None:
         await ensure_collections()
         await queue.start(handle_task)
+        asyncio.create_task(_guest_cleanup_loop())
 
     @app.on_event("shutdown")
     async def _stop_worker() -> None:
         await queue.stop()
 
     return app
+
+
+async def _guest_cleanup_loop() -> None:
+    """游客匿名会话 TTL 清理：删除超过 guest_cleanup_hours 的匿名会话及其请求/匹配（每小时跑一次）。"""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import delete, select
+
+    from app.db.models import Conversation, ConversationEvent, CustomerRequest, MatchResult, MatchRun
+    from app.db.session import SessionLocal
+
+    while True:
+        try:
+            async with SessionLocal() as db:
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.guest_cleanup_hours)
+                res = await db.execute(select(Conversation).where(
+                    Conversation.is_anonymous.is_(True), Conversation.updated_at < cutoff
+                ))
+                convs = res.scalars().all()
+                for c in convs:
+                    reqs = (await db.execute(
+                        select(CustomerRequest).where(CustomerRequest.conversation_id == c.conversation_id)
+                    )).scalars().all()
+                    rids = [r.request_id for r in reqs]
+                    if rids:
+                        await db.execute(delete(MatchResult).where(MatchResult.request_id.in_(rids)))
+                        await db.execute(delete(MatchRun).where(MatchRun.request_id.in_(rids)))
+                    await db.execute(delete(CustomerRequest).where(CustomerRequest.conversation_id == c.conversation_id))
+                    await db.execute(delete(ConversationEvent).where(ConversationEvent.conversation_id == c.conversation_id))
+                    await db.execute(delete(Conversation).where(Conversation.conversation_id == c.conversation_id))
+                if convs:
+                    await db.commit()
+                    logger.info("guest cleanup removed %d anonymous conversations", len(convs))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("guest cleanup failed: %s", exc)
+        await asyncio.sleep(3600)
 
 
 app = create_app()

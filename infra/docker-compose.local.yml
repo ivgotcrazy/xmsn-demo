@@ -1,5 +1,6 @@
 # 需脉枢纽 PoC 编排（架构 11.2 / M8 T8.3）：PG + Milvus + 后端 api + 前端 web
-# 一键：cd infra && cp .env.example .env（填 LLM/Embedding Key）&& docker compose up -d --build
+# 一键：cd infra && cp .env.example .env（填 LLM/Embedding Key）&& docker compose -f docker-compose.local.yml up -d --build
+# 远程部署时叠加 docker-compose.remote.yml（端口收敛），由 infra/deploy_remote.py 自动处理
 # 访问：http://localhost（买家/厂商端） / http://localhost/admin/（管理后台） / http://localhost/api/v1/...
 name: xmsn-demo
 
@@ -43,6 +44,8 @@ services:
     container_name: xmsn-api
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "8000:8000"   # 本地开发：dev server（5173 vite 代理 /api → localhost:8000）
     environment:
       # 服务间连接用 compose 服务名（覆盖 .env 里的 localhost 占位）
       DATABASE_URL: postgresql+asyncpg://xumai:xumai@postgres:5432/xumai

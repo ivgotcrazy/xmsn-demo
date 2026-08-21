@@ -98,9 +98,8 @@ async function openDoc(docName?: string, docId?: string, page?: number): Promise
 
 <template>
   <div v-if="capability" class="capability">
-    <!-- 顶部：一句话能力摘要（概要条） -->
+    <!-- 顶部：能力概要（一句话能力摘要） -->
     <section v-if="capability.summary_text" class="capability__summary">
-      <span class="capability__summary-label">一句话能力摘要</span>
       <p class="capability__summary-text">{{ capability.summary_text }}</p>
     </section>
 
@@ -269,13 +268,6 @@ async function openDoc(docName?: string, docId?: string, page?: number): Promise
   border-left: 3px solid var(--color-primary);
   border-radius: var(--radius-8);
   margin-bottom: var(--space-16);
-}
-.capability__summary-label {
-  flex: none;
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-600);
-  color: var(--color-primary-text);
-  white-space: nowrap;
 }
 .capability__summary-text {
   margin: 0;
